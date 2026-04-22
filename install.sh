@@ -49,10 +49,38 @@ detect_arch() {
 }
 
 # Fetch latest release tag via the public GitHub API (no auth).
+#
+# Two-step resolution so pre-launch / prerelease-only projects still
+# DWIM for `curl | sh`:
+#
+#   1. /releases/latest      ← skips prereleases; returns only `stable` tags
+#   2. /releases?per_page=1  ← newest ANY release, prereleases included
+#
+# A project with nothing but prereleases (our state right now) would 404
+# on step 1 and silently fail with "could not resolve latest version".
+# Step 2 is the honest fallback: install the newest thing on offer.
+#
+# Output contract: prints "<tag>" on stdout on success; writes "1" to the
+# global `IS_PRERELEASE` file so `main` can annotate the install banner.
+# Returns non-zero only when both endpoints fail.
 latest_version() {
-	url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest"
-	# Extract the first tag_name field with sed so we need zero deps.
-	curl -fsSL "$url" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1
+	latest_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest"
+	if tag=$(curl -fsSL "$latest_url" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1) && [ -n "$tag" ]; then
+		echo "$tag"
+		return 0
+	fi
+
+	# Fallback: newest release of any kind. The `?per_page=1` trick avoids
+	# paging through potentially thousands of historical releases. GitHub's
+	# default sort is `published_at` desc — we want that.
+	list_url="https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=1"
+	if tag=$(curl -fsSL "$list_url" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1) && [ -n "$tag" ]; then
+		printf '1' > "$PRERELEASE_FLAG_FILE" 2>/dev/null || true
+		echo "$tag"
+		return 0
+	fi
+
+	return 1
 }
 
 # Main -----------------------------------------------------------
@@ -62,6 +90,13 @@ need_cmd mktemp
 
 OS=$(detect_os)
 ARCH=$(detect_arch)
+
+# TMPDIR created first so latest_version can plant the prerelease marker
+# into a known path (subshells in command substitution can't mutate
+# caller-scope shell vars).
+TMPDIR=$(mktemp -d)
+PRERELEASE_FLAG_FILE="${TMPDIR}/.prerelease"
+trap 'rm -rf "$TMPDIR"' EXIT INT TERM
 
 VERSION="${PURA_VERSION:-}"
 if [ -z "$VERSION" ]; then
@@ -76,11 +111,15 @@ ARCHIVE_EXT="tar.gz"
 ARCHIVE="${BINARY}_${STRIPPED_VERSION}_${OS}_${ARCH}.${ARCHIVE_EXT}"
 BASE_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${VERSION}"
 
-say "Installing ${BINARY} ${VERSION} for ${OS}/${ARCH}"
+# Surface prerelease status honestly — users `curl | sh`ing on a pre-launch
+# project deserve to know they're on the bleeding edge, not silently
+# assume they got a stable build.
+if [ -s "$PRERELEASE_FLAG_FILE" ]; then
+	say "Installing ${BINARY} ${VERSION} (pre-release) for ${OS}/${ARCH}"
+else
+	say "Installing ${BINARY} ${VERSION} for ${OS}/${ARCH}"
+fi
 
-TMPDIR=$(mktemp -d)
-# Cleanup even on Ctrl-C so /tmp doesn't accumulate archives.
-trap 'rm -rf "$TMPDIR"' EXIT INT TERM
 cd "$TMPDIR"
 
 say "Downloading ${ARCHIVE}…"
