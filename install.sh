@@ -6,8 +6,10 @@
 #
 # Non-interactive options:
 #   PURA_VERSION=v0.2.0          install a specific tag
-#   PURA_PREFIX=$HOME/.local/bin install somewhere other than /usr/local/bin
+#   PURA_PREFIX=/usr/local/bin   install somewhere other than ~/.local/bin
+#                                (system paths trigger sudo; user space doesn't)
 #   PURA_NO_VERIFY=1             skip checksum verification (not recommended)
+#   PURA_NO_COSIGN=1             skip cosign signature check even if cosign present
 #
 # POSIX sh on purpose — runs on macOS, Linux, Alpine, Docker shells.
 
@@ -21,7 +23,10 @@ set -eu
 GITHUB_OWNER="${PURA_GITHUB_OWNER:-pura-labs}"
 GITHUB_REPO="${PURA_GITHUB_REPO:-cli}"
 BINARY="pura"
-PREFIX="${PURA_PREFIX:-/usr/local/bin}"
+# Default to user-space install (XDG convention, no sudo). Matches rustup /
+# bun / deno / uv / pip --user. Users who explicitly want a system-wide
+# install pass PURA_PREFIX=/usr/local/bin and accept the sudo prompt.
+PREFIX="${PURA_PREFIX:-${HOME:-/root}/.local/bin}"
 
 # Helpers --------------------------------------------------------
 say() { printf '  %s\n' "$*"; }
@@ -184,24 +189,67 @@ BIN_NAME="$BINARY"
 
 [ -x "$BIN_NAME" ] || die "binary not found after unpack — archive layout may have changed"
 
-# Permission check: ask for sudo once instead of failing silently.
+# Install --------------------------------------------------------
+# mkdir -p is idempotent. For user-space prefixes this just creates the
+# dir on fresh machines; for system prefixes this is a no-op (the dir
+# exists) and the write itself is what triggers sudo below.
+if ! mkdir -p "$PREFIX" 2>/dev/null; then
+	# Couldn't create — almost always means a system path the user doesn't
+	# own (e.g. /usr/local/bin on a locked-down box). Fall through to the
+	# sudo branch below which will prompt once.
+	:
+fi
+
 if [ -w "$PREFIX" ]; then
 	mv "$BIN_NAME" "$PREFIX/$BIN_NAME"
-else
+elif [ -d "$PREFIX" ]; then
+	# Dir exists but isn't user-writable → legacy system path case.
+	# Prompt once; user opted into /usr/local/bin via PURA_PREFIX.
 	say "Installing to $PREFIX requires sudo…"
+	sudo mkdir -p "$PREFIX"
 	sudo mv "$BIN_NAME" "$PREFIX/$BIN_NAME"
+else
+	die "could not create or write to $PREFIX"
 fi
-chmod +x "$PREFIX/$BIN_NAME"
+chmod +x "$PREFIX/$BIN_NAME" 2>/dev/null || sudo chmod +x "$PREFIX/$BIN_NAME"
 
 # Verify + onboarding -------------------------------------------
 say "Verifying install…"
 "$PREFIX/$BIN_NAME" version >/dev/null 2>&1 || say "(binary ran but 'pura version' did not — continue anyway)"
 
+# PATH hint: on a stock macOS shell or a minimal Linux $HOME/.local/bin
+# isn't always on PATH. Emit a shell-aware one-liner only when PREFIX
+# actually isn't discoverable — stays out of the way for users whose
+# distro (Ubuntu, Debian via ~/.profile) already includes it.
+path_hint=""
+case ":${PATH:-}:" in
+	*":${PREFIX}:"*) ;;
+	*)
+		# Detect the user's shell via $SHELL (set by login); fall back to
+		# "your shell's rc file" if it's something we don't recognize.
+		rc=""
+		reload=""
+		case "${SHELL:-}" in
+			*/zsh)  rc="~/.zshrc"; reload="exec zsh" ;;
+			*/bash) rc="~/.bashrc"; reload="exec bash" ;;
+			*/fish) rc="~/.config/fish/config.fish"; reload="exec fish" ;;
+		esac
+		if [ -n "$rc" ] && [ "${SHELL##*/}" = "fish" ]; then
+			path_hint="$(printf '  Add to PATH (fish):\n    fish_add_path %s\n' "$PREFIX")"
+		elif [ -n "$rc" ]; then
+			path_hint="$(printf '  Add to PATH:\n    echo '\''export PATH="%s:$PATH"'\'' >> %s && %s\n' "$PREFIX" "$rc" "$reload")"
+		else
+			path_hint="$(printf '  Add to PATH: export PATH="%s:$PATH"\n' "$PREFIX")"
+		fi
+		;;
+esac
+
 cat <<EOF
 
   ✓ ${BINARY} installed to ${PREFIX}/${BIN_NAME}
 
-  Try:
+${path_hint:+${path_hint}
+}  Try:
     ${BINARY} auth login
     ${BINARY} push <file>
     ${BINARY} --help
