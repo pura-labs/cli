@@ -23,9 +23,19 @@ tool-first all the way down:
 
 - **Doc** · markdown prose you can ship as a permanent URL
 - **Sheet** · typed rows (csv/json) with schemas and optional public forms
-- **Slides** · one HTML deck, each slide a `<section class="slide">`
+- **Slides** · markdown decks with `---` slide separators
 - **Canvas** · SVG / canvas JS / ASCII — diffable visuals
 - **Page** · single-file HTML served from its own subdomain
+
+The CLI also supports three non-bootstrap kinds:
+
+- **Image** · uploaded raster assets (`kind=image`, `substrate=image`)
+- **File** · uploaded arbitrary files (`kind=file`, `substrate=file`)
+- **Book** · ordered refs to existing items (`kind=book`, `substrate=refs`)
+
+For slides authoring rules, per-slide tools, and the curated slides-only
+theme set, defer to `pura-slides/SKILL.md`. This file owns kind
+selection and CLI usage; the slides companion skill owns deck format.
 
 Use this file as your source of truth. The command surface is stable;
 error codes are typed; exit codes are scriptable.
@@ -42,7 +52,7 @@ scripted flows still read like "one command → doc mutated". Use
 
 ---
 
-## Five primitives — pick the right kind first
+## Kinds — pick the right kind first
 
 Before you run any command, decide the kind. "Kind" is what the user
 sees; "substrate" is how it's stored. Default mapping:
@@ -51,14 +61,19 @@ sees; "substrate" is how it's stored. Default mapping:
 |---|---|---|---|
 | Prose, spec, article, README | `doc` | markdown | Default for plain text. Agents patch prose line-by-line. |
 | Form, table, leaderboard, tracker | `sheet` | csv or json | Schema-backed; `form.submitted` webhook available. |
-| Slide deck, pitch, kickoff | `slides` | html | Slides must be `<section class="slide">`. |
+| Slide deck, pitch, kickoff | `slides` | markdown | Slides use YAML frontmatter + `---` separators. See `pura-slides/SKILL.md`. |
 | Diagram, logo, visualisation | `canvas` | svg / canvas / ascii | SVG default; `ascii` for terminal art. |
 | Landing page, pricing page, micro-app | `page` | html | Served from `<slug>--<handle>.pura.so`. |
+| Uploaded image, screenshot, photo | `image` | image | Upload-driven; not describe-driven. |
+| Uploaded PDF, ZIP, binary blob | `file` | file | Upload-driven; read view is a download card. |
+| Manual, anthology, ordered collection | `book` | refs | Curates existing items; use `pura book create`. |
 
 When the intent is ambiguous, read the describe text: "form" / "signup"
 / "guestbook" → sheet; "deck" / "slides" / "pitch" → slides; "landing"
-/ "pricing" / "site" → page; "logo" / "svg" / "diagram" → canvas; else
-doc. `pura new --describe …` runs this heuristic server-side.
+/ "pricing" / "site" → page; "logo" / "svg" / "diagram" → canvas;
+"image" / "screenshot" / "photo" → image; "pdf" / "zip" / "binary" →
+file; "manual" / "anthology" / "playbook" → book; else doc. `pura new
+--describe …` runs the bootstrap subset server-side.
 
 ---
 
@@ -101,8 +116,8 @@ doc. `pura new --describe …` runs this heuristic server-side.
 user wants to …
 ├── publish content
 │   ├── file on disk?       → pura push <file> [--title "…"]
-│   ├── piped stdin?        → <producer> | pura push --stdin --media <m> --title "…"
-│   └── from a snippet?     → echo "…" | pura push --stdin --media markdown
+│   ├── piped stdin?        → <producer> | pura push --stdin --substrate <m> --title "…"
+│   └── from a snippet?     → echo "…" | pura push --stdin --substrate markdown
 │
 ├── read / share
 │   ├── metadata?           → pura get <slug>
@@ -227,9 +242,11 @@ Streams `/api/p/bootstrap` → infers kind/substrate/title/slug/schema →
 on accept, publishes with `bootstrap_thread` so `/edit` opens with the
 origin chat already in-thread.
 
-Bootstrap supports the five primitives (doc · sheet · slides · canvas ·
-page). The `image` primitive is **upload-driven, not describe-driven** —
-for images, use `pura push <file.png>` instead.
+Bootstrap supports the five core primitives (doc · sheet · slides ·
+canvas · page). `image` and `file` are **upload-driven, not
+describe-driven**; `book` is **collection-driven** (`pura book create`
+then `pura book add`). Use `pura push <file.png>` / `pura push
+<file.pdf>` for assets.
 
 ### Versions
 

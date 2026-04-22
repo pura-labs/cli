@@ -65,3 +65,30 @@ func TestPuraSlidesSkillMentionsChefThemes(t *testing.T) {
 		}
 	}
 }
+
+func TestPuraSkillDocumentsSlidesAsMarkdown(t *testing.T) {
+	data, err := fs.ReadFile(FS, PuraSkillPath)
+	if err != nil {
+		t.Fatalf("read skill: %v", err)
+	}
+	body := string(data)
+	if !strings.Contains(body, "| `slides` | markdown |") {
+		t.Error("main pura skill should document slides as markdown")
+	}
+	if strings.Contains(body, "--media") {
+		t.Error("main pura skill should not mention the nonexistent --media flag")
+	}
+}
+
+func TestPuraSkillMentionsExtendedKinds(t *testing.T) {
+	data, err := fs.ReadFile(FS, PuraSkillPath)
+	if err != nil {
+		t.Fatalf("read skill: %v", err)
+	}
+	body := string(data)
+	for _, kind := range []string{"`image`", "`file`", "`book`"} {
+		if !strings.Contains(body, kind) {
+			t.Errorf("main pura skill does not mention extended kind %s", kind)
+		}
+	}
+}
