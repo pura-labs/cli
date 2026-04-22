@@ -115,13 +115,30 @@ ARCHIVE_EXT="tar.gz"
 ARCHIVE="${BINARY}_${STRIPPED_VERSION}_${OS}_${ARCH}.${ARCHIVE_EXT}"
 BASE_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${VERSION}"
 
+# Detect existing install and surface the transition. Re-running `curl | sh`
+# is the supported update path — we want the banner to say "Updating" so
+# users see plainly that an old binary is being replaced.
+existing_version=""
+if [ -x "$PREFIX/$BINARY" ]; then
+	# `pura version` outputs a JSON envelope by default — pull the
+	# "version" field with plain sed so we stay dependency-free
+	# (no jq / python required on the install path).
+	existing_version=$("$PREFIX/$BINARY" version 2>/dev/null \
+		| sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+		| head -n1)
+fi
+action="Installing"
+if [ -n "$existing_version" ] && [ "$existing_version" != "${VERSION#v}" ]; then
+	action="Updating pura v${existing_version} →"
+fi
+
 # Surface prerelease status honestly — users `curl | sh`ing on a pre-launch
 # project deserve to know they're on the bleeding edge, not silently
 # assume they got a stable build.
 if [ -s "$PRERELEASE_FLAG_FILE" ]; then
-	say "Installing ${BINARY} ${VERSION} (pre-release) for ${OS}/${ARCH}"
+	say "${action} ${VERSION} (pre-release) for ${OS}/${ARCH}"
 else
-	say "Installing ${BINARY} ${VERSION} for ${OS}/${ARCH}"
+	say "${action} ${VERSION} for ${OS}/${ARCH}"
 fi
 
 cd "$TMPDIR"
