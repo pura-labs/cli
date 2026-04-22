@@ -6,8 +6,7 @@
 #
 # Non-interactive options:
 #   PURA_VERSION=v0.2.0          install a specific tag
-#   PURA_PREFIX=/usr/local/bin   install somewhere other than ~/.local/bin
-#                                (system paths trigger sudo; user space doesn't)
+#   PURA_PREFIX=/path/to/bin     override default install dir (must be user-writable)
 #   PURA_NO_VERIFY=1             skip checksum verification (not recommended)
 #   PURA_NO_COSIGN=1             skip cosign signature check even if cosign present
 #
@@ -190,28 +189,14 @@ BIN_NAME="$BINARY"
 [ -x "$BIN_NAME" ] || die "binary not found after unpack — archive layout may have changed"
 
 # Install --------------------------------------------------------
-# mkdir -p is idempotent. For user-space prefixes this just creates the
-# dir on fresh machines; for system prefixes this is a no-op (the dir
-# exists) and the write itself is what triggers sudo below.
-if ! mkdir -p "$PREFIX" 2>/dev/null; then
-	# Couldn't create — almost always means a system path the user doesn't
-	# own (e.g. /usr/local/bin on a locked-down box). Fall through to the
-	# sudo branch below which will prompt once.
-	:
-fi
-
-if [ -w "$PREFIX" ]; then
-	mv "$BIN_NAME" "$PREFIX/$BIN_NAME"
-elif [ -d "$PREFIX" ]; then
-	# Dir exists but isn't user-writable → legacy system path case.
-	# Prompt once; user opted into /usr/local/bin via PURA_PREFIX.
-	say "Installing to $PREFIX requires sudo…"
-	sudo mkdir -p "$PREFIX"
-	sudo mv "$BIN_NAME" "$PREFIX/$BIN_NAME"
-else
-	die "could not create or write to $PREFIX"
-fi
-chmod +x "$PREFIX/$BIN_NAME" 2>/dev/null || sudo chmod +x "$PREFIX/$BIN_NAME"
+# Contract: PREFIX must be user-writable. Defaults to $HOME/.local/bin
+# (created if missing). Passing PURA_PREFIX=/usr/local/bin without owning
+# the dir is a fast-fail, not a silent sudo escalation — caller should
+# `sudo -E sh install.sh` if they actually want a system path.
+mkdir -p "$PREFIX" 2>/dev/null || die "cannot create $PREFIX (override with PURA_PREFIX)"
+[ -w "$PREFIX" ] || die "$PREFIX is not writable (override with PURA_PREFIX, or re-run with sudo if you meant a system path)"
+mv "$BIN_NAME" "$PREFIX/$BIN_NAME"
+chmod +x "$PREFIX/$BIN_NAME"
 
 # Verify + onboarding -------------------------------------------
 say "Verifying install…"
