@@ -1,0 +1,19 @@
+Public view counter by default. Pass --detail (owner only) for a
+country breakdown, view-type split, and bot ratio.
+
+Usage:
+  pura stats <slug> [flags]
+
+Flags:
+      --detail   Owner-only full breakdown (country, type, bot ratio)
+  -h, --help     help for stats
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output

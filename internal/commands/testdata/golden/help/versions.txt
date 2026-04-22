@@ -1,0 +1,31 @@
+Every manual save or AI edit creates a new version server-side. Use
+these commands to audit history and roll back when needed.
+
+  pura versions ls <slug>           List versions (newest first)
+  pura versions show <slug> <N>     Dump version N's content
+  pura versions diff <slug> A B     Unified diff between two versions
+  pura versions restore <slug> N    Roll forward to version N
+
+Usage:
+  pura versions [command]
+
+Available Commands:
+  diff        Unified diff between two versions (B defaults to latest)
+  ls          List versions of a document
+  restore     Roll forward to a previous version
+  show        Print a specific version's content
+
+Flags:
+  -h, --help   help for versions
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output
+
+Use "pura versions [command] --help" for more information about a command.

@@ -1,0 +1,30 @@
+Install the bundled SKILL.md into one of several known locations so
+Claude Code, OpenCode, or any generic AI agent can discover it.
+
+Run `pura skill` (no args) for an interactive picker, or use the
+subcommands for scripting.
+
+Usage:
+  pura skill [flags]
+  pura skill [command]
+
+Available Commands:
+  install     Install a skill (defaults to the built-in pura skill)
+  ls          List installed skills across every known target
+  rm          Uninstall a skill copy
+  run         Print a skill's SKILL.md to stdout
+
+Flags:
+  -h, --help   help for skill
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output
+
+Use "pura skill [command] --help" for more information about a command.

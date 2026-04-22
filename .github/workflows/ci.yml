@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least-privilege: CI only reads source. Anything that mutates repo state
+# (labels, comments) would need an explicit scope elevation.
+permissions:
+  contents: read
+
+# One CI run per branch head; newer push cancels in-flight runs so PRs
+# don't stack minutes on abandoned pushes. Release workflow does NOT
+# share this group — tag builds must never be cancelled by a later push.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Primary gate: full `make check` (fmt + vet + race test + coverage floor
+  # + SURFACE drift). Mirrors what a contributor runs locally. If anything
+  # here is red, the PR cannot merge.
+  check:
+    name: make check (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: make check
+        run: make check
+
+  # Smoke test on the other two goreleaser target OSes. We don't rerun the
+  # coverage gate here (coverage measurement is platform-invariant for
+  # pure-Go code); we DO rerun tests so that darwin-only or windows-only
+  # behaviour (path separators, TTY probing, file perms) gets caught in
+  # the same PR that introduces it.
+  smoke:
+    name: go test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: go test
+        run: go test ./...
+
+  # Dry-run the release pipeline on every PR: catches goreleaser config
+  # errors, missing build tags, or ldflags typos BEFORE a tag push hits
+  # the real release workflow (where failure = no artifacts = bad day).
+  # --skip sign,sbom,publish keeps this cheap and OIDC-free.
+  goreleaser-check:
+    name: goreleaser snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # goreleaser reads git tags for changelog
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish,sign,sbom

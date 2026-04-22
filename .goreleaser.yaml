@@ -1,0 +1,116 @@
+version: 2
+
+project_name: pura
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+    # Regenerate shell completions so the archive ships whatever the
+    # current flag set actually exposes.
+    - sh scripts/gen-completions.sh
+
+builds:
+  - id: pura
+    main: ./cmd/pura
+    binary: pura
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # windows/arm64 intentionally builds — that combination is increasingly
+    # common on Copilot+/Surface Pro X and Parallels on Apple Silicon. Linux
+    # arm64 covers GitHub Actions hosted runners, Cloud Run, and Raspberry Pi.
+    # We skip 386/ppc64le/s390x until someone asks: every extra arch is a
+    # checksum line, a GitHub release asset, and a slower `goreleaser release`.
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE*
+      - README*
+      - skills/**/*
+      # Shell-completion scripts (bash/zsh/fish) generated via
+      # scripts/gen-completions.sh in the before-hook.
+      - completions/*
+
+checksum:
+  name_template: "checksums.txt"
+
+# Cosign keyless signing via Sigstore. Uses GitHub OIDC token (requires
+# `id-token: write` permission in release.yml), no long-lived secrets.
+# Signs the checksum file only — verifying checksums.txt transitively
+# verifies every archive without signing each individually.
+# Verify locally:
+#   cosign verify-blob \
+#     --certificate checksums.txt.pem \
+#     --signature checksums.txt.sig \
+#     --certificate-identity-regexp 'https://github.com/pura-labs/cli/.*' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     checksums.txt
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - "sign-blob"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+# Syft SBOM per archive — supply-chain inventory. No runtime cost on the
+# user side; appears as ${archive}.sbom.json on every release asset.
+sboms:
+  - artifacts: archive
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+# Homebrew tap — uncomment and configure when ready
+# brews:
+#   - repository:
+#       owner: pura-labs
+#       name: homebrew-tap
+#     homepage: "https://pura.so"
+#     description: "AI-native content publishing CLI"
+#     license: "MIT"
+#     install: |
+#       bin.install "pura"
+#     test: |
+#       system "#{bin}/pura", "version"
+
+release:
+  github:
+    owner: pura-labs
+    name: cli
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"

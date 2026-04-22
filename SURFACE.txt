@@ -1,0 +1,151 @@
+pura auth  — Manage credentials
+pura auth login  — Sign in via device flow
+    --no-browser  Print the URL but do not attempt to open a browser
+    --scope <stringSlice>  Scopes to request (repeatable). Default: docs:read,docs:write
+    --timeout <int>  Maximum seconds to wait for authorization
+    --token <string>  Store this token directly, skipping the browser flow (CI-friendly)
+pura auth logout  — Sign out — wipe stored credentials for this profile
+pura auth refresh  — Rotate the stored token
+    --yes  Skip the pre-rotation confirmation log line
+pura auth status  — Show current auth state
+    --verify  Call the server to confirm the token is still valid
+pura auth token  — Print the stored token (use with care)
+    --yes  Confirm printing to a terminal
+pura book  — Curate books — ordered collections of any item (create · add · read · rm · reorder · export)
+pura book add  — Add a chapter (ref to an existing item) to a book
+    --anchor <string>  Anchor chapter ref — required when --position is 'before' or 'after'
+    --position <string>  'start' | 'end' (default) | 'before' | 'after'
+pura book create  — Create an empty book (kind=book, substrate=refs)
+    --author <string>  Author byline (stored in metadata)
+    --subtitle <string>  Subtitle (stored in metadata)
+    --theme <string>  Theme preset
+    --title <string>  Book title
+pura book export  — Export a book to markdown or json
+    --format <string>  Export format: markdown · json
+    --out <string>  Write output to this file instead of stdout
+pura book read  — Read a book's chapter list + metadata
+pura book reorder  — Rewrite a book's chapter order (declarative — pass the full new order)
+pura book rm  — Remove a chapter reference from a book (the chapter item stays)
+pura chat  — AI-edit a document
+    --dry-run  Auto-reject the proposal so nothing lands; use to preview
+    --interactive  On TTY, show the diff and prompt before applying
+    --model <string>  Model id; when omitted the server picks the default
+    --no-stream  Suppress the token-by-token stderr stream
+    --resolve <string>  When a pending proposal blocks this turn, resolve it first: accept|reject
+    --selection <string>  Scope the edit to this substring of the doc
+    --yes  Skip the interactive prompt (forces auto-accept)
+pura claim  — Attach anonymously-published docs to your account
+pura completion  — Generate shell completion scripts
+pura config  — Manage configuration
+pura config get  — Get a config value
+pura config list  — List all config values
+pura config set  — Set a config value
+pura doctor  — Check CLI + network + auth health
+pura edit  — Update a document
+    --file <string>  Replace content from file
+    --stdin  Replace content from stdin
+    --theme <string>  Update theme
+    --title <string>  Update title
+pura events  — List activity events for a document
+    --kinds <string>  Filter by comma-separated public kinds (e.g. doc.updated,comment.added)
+    --limit <int>  Max rows (1..200, default 50 server-side)
+    --poll-interval <int>  Seconds between polls when --follow is set
+    --since <int>  Cursor: return events with id > this value
+    -f/--follow  Poll and stream new events until Ctrl-C
+pura get  — Get a document
+    -f/--format <string>  Output format (raw|ctx|meta)
+    -o/--output <string>  Save to file
+pura keys  — Manage API keys
+pura keys create  — Create a new API key
+    --scope <stringSlice>  Scope to grant (repeatable). Default: docs:read,docs:write
+    -n/--name <string>  Human-readable label for the key
+pura keys ls  — List API keys
+pura keys rm  — Revoke an API key
+    --yes  Skip the confirmation prompt
+pura ls  — List your documents
+pura mcp  — Connect MCP clients (Claude, Cursor, VS Code, …) to Pura
+pura mcp config  — Print the MCP connection JSON for a named client
+    --client <string>  Target client id
+    --for-copy  Replace the token with a placeholder
+    --scope <string>  user | project (for per-client rendering)
+    --transport <string>  auto | url | stdio
+pura mcp doctor  — Cross-client health scan (stale keys, orphans, legacy paths)
+pura mcp install  — Wire an MCP client's config to Pura (creates a scoped key)
+    --client <string>  Target client id (alternative to positional arg)
+    --name <string>  Key name (default: <client>@<host>)
+    --permissions <stringSlice>  Key scopes (default: docs:read,docs:write)
+    --print  Dry run: print diff, do not write or create key
+    --scope <string>  user | project (client-dependent default)
+    --transport <string>  auto | url | stdio
+    -y/--yes  Skip diff confirmation
+pura mcp ls  — List installed MCP entries and their key status
+    --all-keys  Include every MCP-origin key on the server (not just installed ones)
+    --scope <string>  user | project | all
+pura mcp rotate  — Swap the API key for an installed MCP client (atomic)
+    --client <string>  Target client id (alternative to positional arg)
+    --scope <string>  user | project
+pura mcp test  — Probe Pura's /mcp endpoint from this machine
+    --client <string>  Use the token from an installed client's config
+    --scope <string>  Scope for --client lookup (user|project)
+    --url <string>  Override the /mcp URL (absolute URL to /mcp)
+pura mcp uninstall  — Remove Pura's MCP entry from a client and revoke the bound key
+    --client <string>  Target client id (alternative to positional arg)
+    --keep-key  Do not revoke the server-side key
+    --scope <string>  user | project
+pura new  — Create a document from a natural-language description (chat-first)
+    --describe <string>  Natural-language description of the doc to draft (required)
+    --model <string>  Model id for the planner
+    --open  Open the published doc in the browser (TTY only)
+    --starter <string>  Starter chip id (blog|form|landing|table|slides|canvas)
+    --yes  Auto-publish without the TTY confirmation
+pura open  — Open document in browser
+pura present  — Open a slides deck in presentation mode
+pura preview  — Preview a file before publishing
+pura push  — Publish a document
+    --kind <string>  Primitive kind (doc|sheet|page|slides|canvas|image|file|book) — overrides the kind derived from --substrate
+    --stdin  Read content from stdin
+    --substrate <string>  Wire format (markdown|html|csv|json|svg|canvas|ascii) — auto-detected from content when omitted
+    --theme <string>  Theme preset
+    -o/--open  Open in browser after push
+    -t/--title <string>  Document title
+pura rm  — Delete a document
+    --force  Alias for --yes (deprecated)
+    -y/--yes  Skip confirmation
+pura sheet  — Read sheets by reference (ls · schema · export · clone)
+pura sheet clone  — Duplicate a sheet into a new doc
+    --to <string>  Target slug (default: auto-assigned)
+    --to-handle <string>  Target handle (default: same as source)
+pura sheet export  — Serialize a sheet to csv / json / xlsx
+    --format <string>  Export format: csv · json · xlsx
+    --out <string>  Write output to this file instead of stdout
+pura sheet ls  — List rows from a sheet
+    --cursor <string>  Cursor (row _id) to resume listing after
+    --limit <int>  Max rows to return (default: server default 50)
+pura sheet schema  — Show a sheet's column schema and version
+pura skill  — Install the Pura agent skill (SKILL.md) into a known location
+pura skill install  — Install a skill (defaults to the built-in pura skill)
+    --source <string>  External source (URL or local path); omit for the built-in
+    --target <string>  Destination directory (default: ~/.claude/skills)
+pura skill ls  — List installed skills across every known target
+pura skill rm  — Uninstall a skill copy
+    --target <string>  Limit removal to this directory
+pura skill run  — Print a skill's SKILL.md to stdout
+pura stats  — Show view stats for a document
+    --detail  Owner-only full breakdown (country, type, bot ratio)
+pura tool  — Call any Pura tool via /api/tool/:name (dispatcher escape hatch)
+pura tool call  — POST to /api/tool/:name — dispatcher escape hatch
+    --args <string>  Tool arguments as JSON object
+    --dry-run  Preview without side effects (requires tool support)
+    --idempotency-key <string>  Forward an Idempotency-Key header
+pura tool inspect  — Show a tool's input schema and docs
+    --refresh  Re-fetch the catalog before looking up
+pura tool ls  — List available tools (cached; --refresh to force a fetch)
+    --refresh  Re-fetch the catalog from the server
+pura version  — Print version info
+pura versions  — Inspect and restore document versions
+pura versions diff  — Unified diff between two versions (B defaults to latest)
+    --color <string>  Color output: auto | always | never
+pura versions ls  — List versions of a document
+pura versions restore  — Roll forward to a previous version
+    --yes  Skip the confirmation prompt
+pura versions show  — Print a specific version's content

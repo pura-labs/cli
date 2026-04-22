@@ -1,0 +1,30 @@
+List, create, or revoke the API keys bound to your account.
+
+API keys are bearer tokens of the form sk_pura_…. Each carries scopes
+(docs:read, docs:write, comments:read, comments:write, subscriptions:manage).
+Typical use:
+  - CI / agent gets its own key with the minimum scopes it needs.
+  - Revoke compromised keys with `pura keys rm`.
+
+Usage:
+  pura keys [command]
+
+Available Commands:
+  create      Create a new API key
+  ls          List API keys
+  rm          Revoke an API key
+
+Flags:
+  -h, --help   help for keys
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output
+
+Use "pura keys [command] --help" for more information about a command.

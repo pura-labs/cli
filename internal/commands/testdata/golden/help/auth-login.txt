@@ -1,0 +1,34 @@
+Sign in to Pura.
+
+Interactive (default):
+  Opens your browser to authorize a long-lived API key via the OAuth 2.0
+  Device Authorization Grant. The CLI polls until you approve, then stores
+  the resulting token in ~/.config/pura/credentials.json (mode 0600).
+
+Non-interactive (CI / agent):
+  Pass --token to skip the flow and save a pre-issued key directly. Pair
+  with --profile to keep multiple identities separated.
+
+Usage:
+  pura auth login [flags]
+
+Examples:
+  pura auth login
+  pura auth login --no-browser
+  pura auth login --token sk_pura_xxxxxxxx --profile ci
+
+Flags:
+  -h, --help            help for login
+      --no-browser      Print the URL but do not attempt to open a browser
+      --scope strings   Scopes to request (repeatable). Default: docs:read,docs:write
+      --timeout int     Maximum seconds to wait for authorization (default 600)
+      --token string    Store this token directly, skipping the browser flow (CI-friendly)
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+  -v, --verbose          Verbose output

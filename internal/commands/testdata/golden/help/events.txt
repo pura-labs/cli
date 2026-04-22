@@ -1,0 +1,33 @@
+Paginated event stream. Useful for "what happened here in the last hour?"
+
+Flags:
+  --since <id>    Return events newer than this cursor (server echoes it back)
+  --limit <n>     1..200, default 50
+  --kinds <csv>   Filter by public kinds (e.g. doc.updated,comment.added)
+  --follow        Long-poll: keep printing new events until Ctrl-C
+
+Usage:
+  pura events <slug> [flags]
+
+Examples:
+  pura events xy12ab --limit 20
+  pura events xy12ab --kinds comment.added,version.restored
+  pura events xy12ab --follow
+
+Flags:
+  -f, --follow              Poll and stream new events until Ctrl-C
+  -h, --help                help for events
+      --kinds string        Filter by comma-separated public kinds (e.g. doc.updated,comment.added)
+      --limit int           Max rows (1..200, default 50 server-side)
+      --poll-interval int   Seconds between polls when --follow is set (default 5)
+      --since int           Cursor: return events with id > this value
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output

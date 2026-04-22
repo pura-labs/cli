@@ -1,0 +1,31 @@
+Propose an AI edit to the document. Default behaviour auto-accepts the
+proposal; --dry-run auto-rejects; --interactive shows the diff and asks.
+
+Examples:
+  pura chat xy12ab "tighten the intro"
+  pura chat xy12ab "summarize in 3 bullets" --dry-run
+  pura chat xy12ab "add an email column" --interactive
+  pura chat xy12ab "retry" --resolve=reject
+
+Usage:
+  pura chat <slug> "<instruction>" [flags]
+
+Flags:
+      --dry-run            Auto-reject the proposal so nothing lands; use to preview
+  -h, --help               help for chat
+      --interactive        On TTY, show the diff and prompt before applying
+      --model string       Model id; when omitted the server picks the default
+      --no-stream          Suppress the token-by-token stderr stream
+      --resolve string     When a pending proposal blocks this turn, resolve it first: accept|reject
+      --selection string   Scope the edit to this substring of the doc
+      --yes                Skip the interactive prompt (forces auto-accept)
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output

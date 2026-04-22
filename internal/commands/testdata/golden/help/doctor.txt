@@ -1,0 +1,27 @@
+Runs a short battery of checks and reports each as ok / warn / fail.
+
+Checks:
+  config    — profile exists, api_url well-formed
+  network   — /health reachable and signed "pura"
+  auth      — token present and accepted by /api/auth/me
+  profile   — (when authed) handle set, needed for publishing under @you
+
+The overall exit status is non-zero iff any check is a hard fail. Soft
+warnings (token unset, handle unset) don't fail the command so agents can
+run doctor as a no-op prereq.
+
+Usage:
+  pura doctor [flags]
+
+Flags:
+  -h, --help   help for doctor
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output

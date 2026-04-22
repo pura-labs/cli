@@ -1,0 +1,44 @@
+# Build output
+/pura
+/dist/
+
+# Test
+*.test
+coverage.out
+*.prof
+
+# Go
+vendor/
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+.envrc
+.direnv/
+*.local
+
+# Logs / temp
+*.log
+.cache/
+.tmp/
+tmp/
+coverage/
+*.orig
+*.rej
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

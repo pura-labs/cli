@@ -1,0 +1,26 @@
+Sign in, sign out, inspect or rotate the token used by pura CLI.
+
+Usage:
+  pura auth [command]
+
+Available Commands:
+  login       Sign in via device flow
+  logout      Sign out — wipe stored credentials for this profile
+  refresh     Rotate the stored token
+  status      Show current auth state
+  token       Print the stored token (use with care)
+
+Flags:
+  -h, --help   help for auth
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output
+
+Use "pura auth [command] --help" for more information about a command.

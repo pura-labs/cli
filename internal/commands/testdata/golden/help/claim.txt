@@ -1,0 +1,28 @@
+Claim every document created anonymously with the given edit_token.
+
+Typical flow:
+  1. `pura push --stdin < note.md` (anon) → prints an edit_token
+  2. `pura auth login`                      → sign in
+  3. `pura claim <edit_token>`              → all anon docs show up under your handle
+
+Prerequisites: the signed-in user must already have a public handle set.
+Use the dashboard or `pura config set handle` to pick one first.
+
+Usage:
+  pura claim <edit_token> [flags]
+
+Examples:
+  pura claim sk_pur_deadbeef01234567890abcdef0123456
+
+Flags:
+  -h, --help   help for claim
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output

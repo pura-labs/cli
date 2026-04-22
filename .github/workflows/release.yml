@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Minimum scopes to cut a release with cosign keyless:
+#   contents: write   — create GitHub Release + upload archives
+#   id-token: write   — Sigstore OIDC token for keyless signing
+# Any additional distribution channel (Homebrew tap, Scoop, AUR) needs
+# its own PAT/token; not wired here by design.
+permissions:
+  contents: write
+  id-token: write
+
+# A release MUST NOT be cancelled by a later tag push — serialize instead.
+# cancel-in-progress=false means a second tag push queues behind the first
+# rather than aborting half-uploaded artifacts.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so goreleaser can derive the changelog from the
+          # previous tag. Shallow checkout would produce an empty changelog
+          # on every release.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # cosign for keyless signing (Sigstore ambient OIDC). No key
+      # material lives in secrets — identity = the workflow itself, and
+      # anyone can verify against the GitHub Actions OIDC issuer.
+      - uses: sigstore/cosign-installer@v3
+
+      # syft for SBOM generation (goreleaser's sboms: block invokes it).
+      - uses: anchore/sbom-action/download-syft@v0
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          # goreleaser uploads archives + checksums + signatures + SBOMs
+          # to the GitHub Release keyed by the tag. GITHUB_TOKEN is
+          # issued per-run; no long-lived PAT.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
