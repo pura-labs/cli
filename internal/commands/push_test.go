@@ -370,6 +370,7 @@ func TestPushCommand_Success(t *testing.T) {
 	defer resetCommandGlobals()
 
 	var gotReq api.CreateRequest
+	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("expected POST, got %s", r.Method)
@@ -377,6 +378,7 @@ func TestPushCommand_Success(t *testing.T) {
 		if r.URL.Path != "/api/p" {
 			t.Errorf("expected /api/p, got %s", r.URL.Path)
 		}
+		gotAuth = r.Header.Get("Authorization")
 
 		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
 			t.Fatalf("decode request: %v", err)
@@ -416,6 +418,11 @@ func TestPushCommand_Success(t *testing.T) {
 	}
 	if gotReq.Kind != "" {
 		t.Fatalf("CreateRequest.Kind = %q, want empty", gotReq.Kind)
+	}
+	// Regression: create must send the bearer so the doc is attributed to the
+	// signed-in user (else it lands under the anonymous @_ namespace).
+	if gotAuth != "Bearer tok_existing" {
+		t.Fatalf("Authorization = %q, want Bearer tok_existing", gotAuth)
 	}
 }
 

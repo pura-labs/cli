@@ -74,7 +74,15 @@ func (c *Client) DocumentURL(slug string) string {
 // Create publishes a new document.
 func (c *Client) Create(req CreateRequest) (*CreateResponse, error) {
 	var resp ApiResponse[CreateResponse]
-	if err := c.do("POST", "/api/p", req, nil, &resp); err != nil {
+	// Send the bearer so the doc is attributed to the signed-in user (api key).
+	// Without it the server resolves the caller as anonymous → doc lands under
+	// @_ instead of @<handle>. Anonymous publish (no token) still works: the
+	// header is simply omitted.
+	headers := map[string]string{}
+	if c.Token != "" {
+		headers["Authorization"] = "Bearer " + c.Token
+	}
+	if err := c.do("POST", "/api/p", req, headers, &resp); err != nil {
 		return nil, err
 	}
 	if !resp.OK {
