@@ -1353,6 +1353,161 @@ _pura_help()
     noun_aliases=()
 }
 
+_pura_image_get()
+{
+    last_command="pura_image_get"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--api-url=")
+    two_word_flags+=("--api-url")
+    flags+=("--handle=")
+    two_word_flags+=("--handle")
+    flags+=("--jq=")
+    two_word_flags+=("--jq")
+    flags+=("--json")
+    flags+=("--profile=")
+    two_word_flags+=("--profile")
+    flags+=("--quiet")
+    flags+=("--token=")
+    two_word_flags+=("--token")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_pura_image_ls()
+{
+    last_command="pura_image_ls"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--limit=")
+    two_word_flags+=("--limit")
+    local_nonpersistent_flags+=("--limit")
+    local_nonpersistent_flags+=("--limit=")
+    flags+=("--query=")
+    two_word_flags+=("--query")
+    two_word_flags+=("-q")
+    local_nonpersistent_flags+=("--query")
+    local_nonpersistent_flags+=("--query=")
+    local_nonpersistent_flags+=("-q")
+    flags+=("--api-url=")
+    two_word_flags+=("--api-url")
+    flags+=("--handle=")
+    two_word_flags+=("--handle")
+    flags+=("--jq=")
+    two_word_flags+=("--jq")
+    flags+=("--json")
+    flags+=("--profile=")
+    two_word_flags+=("--profile")
+    flags+=("--quiet")
+    flags+=("--token=")
+    two_word_flags+=("--token")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_pura_image_rm()
+{
+    last_command="pura_image_rm"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--force")
+    local_nonpersistent_flags+=("--force")
+    flags+=("--yes")
+    flags+=("-y")
+    local_nonpersistent_flags+=("--yes")
+    local_nonpersistent_flags+=("-y")
+    flags+=("--api-url=")
+    two_word_flags+=("--api-url")
+    flags+=("--handle=")
+    two_word_flags+=("--handle")
+    flags+=("--jq=")
+    two_word_flags+=("--jq")
+    flags+=("--json")
+    flags+=("--profile=")
+    two_word_flags+=("--profile")
+    flags+=("--quiet")
+    flags+=("--token=")
+    two_word_flags+=("--token")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_pura_image()
+{
+    last_command="pura_image"
+
+    command_aliases=()
+
+    commands=()
+    commands+=("get")
+    commands+=("ls")
+    commands+=("rm")
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--api-url=")
+    two_word_flags+=("--api-url")
+    flags+=("--handle=")
+    two_word_flags+=("--handle")
+    flags+=("--jq=")
+    two_word_flags+=("--jq")
+    flags+=("--json")
+    flags+=("--profile=")
+    two_word_flags+=("--profile")
+    flags+=("--quiet")
+    flags+=("--token=")
+    two_word_flags+=("--token")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _pura_keys_create()
 {
     last_command="pura_keys_create"
@@ -2068,6 +2223,8 @@ _pura_push()
     two_word_flags+=("--kind")
     local_nonpersistent_flags+=("--kind")
     local_nonpersistent_flags+=("--kind=")
+    flags+=("--no-embed")
+    local_nonpersistent_flags+=("--no-embed")
     flags+=("--open")
     flags+=("-o")
     local_nonpersistent_flags+=("--open")
@@ -2959,6 +3116,7 @@ _pura_root_command()
     commands+=("events")
     commands+=("get")
     commands+=("help")
+    commands+=("image")
     commands+=("keys")
     commands+=("ls")
     if [[ -z "${BASH_VERSION:-}" || "${BASH_VERSINFO[0]:-}" -gt 3 ]]; then

@@ -15,6 +15,7 @@ Available Commands:
   events      List activity events for a document
   get         Get a document
   help        Help about any command
+  image       Manage your image library (图床)
   keys        Manage API keys
   ls          List your documents
   mcp         Connect MCP clients (Claude, Cursor, VS Code, …) to Pura

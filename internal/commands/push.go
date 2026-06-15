@@ -18,9 +18,14 @@ import (
 	"github.com/pura-labs/cli/internal/auth"
 	"github.com/pura-labs/cli/internal/config"
 	"github.com/pura-labs/cli/internal/detect"
+	"github.com/pura-labs/cli/internal/ingest"
 	"github.com/pura-labs/cli/internal/output"
 	"github.com/spf13/cobra"
 )
+
+// Client-side cap before uploading a local image referenced by a doc. The
+// server enforces its own (5 MiB auth) limit; failing fast here is cheaper.
+const maxEmbedImageBytes = 10 << 20
 
 func newPushCmd() *cobra.Command {
 	var (
@@ -30,6 +35,7 @@ func newPushCmd() *cobra.Command {
 		flagTheme     string
 		flagStdin     bool
 		flagOpen      bool
+		flagNoEmbed   bool
 	)
 
 	cmd := &cobra.Command{
@@ -73,6 +79,22 @@ func newPushCmd() *cobra.Command {
 			if len(content) == 0 {
 				w.Error("validation", "Content is empty", "Provide non-empty content")
 				return fmt.Errorf("empty content")
+			}
+
+			// Embed-first: upload local image references to the user's host and
+			// rewrite them to host URLs before publishing, so the doc is
+			// self-contained. External http(s) URLs are left for the server to
+			// rehost. --no-embed opts out.
+			if !flagNoEmbed {
+				docDir, _ := os.Getwd()
+				if filename != "" {
+					docDir = filepath.Dir(absPath(filename))
+				}
+				rewritten, err := embedLocalImages(cmd, w, cfg, docDir, content)
+				if err != nil {
+					return err
+				}
+				content = rewritten
 			}
 
 			// --substrate wins over auto-detect; --kind is a separate signal
@@ -149,6 +171,7 @@ func newPushCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagTheme, "theme", "", "Theme preset")
 	cmd.Flags().BoolVar(&flagStdin, "stdin", false, "Read content from stdin")
 	cmd.Flags().BoolVarP(&flagOpen, "open", "o", false, "Open in browser after push")
+	cmd.Flags().BoolVar(&flagNoEmbed, "no-embed", false, "Do not upload/rewrite local image references; publish paths as-is")
 
 	return cmd
 }
@@ -222,19 +245,30 @@ type pushToolEnvelope struct {
 }
 
 type imageUploadResult struct {
-	ImageRef   string `json:"image_ref"`
-	URL        string `json:"url"`
-	R2Key      string `json:"r2_key"`
-	R2Deduped  bool   `json:"r2_deduped"`
-	Slug       string `json:"slug"`
+	ImageRef  string `json:"image_ref"`
+	URL       string `json:"url"`
+	R2Key     string `json:"r2_key"`
+	R2Deduped bool   `json:"r2_deduped"`
+	Deduped   bool   `json:"deduped"`
+	Slug      string `json:"slug"`
 }
 
 type fileUploadResult struct {
-	FileRef    string `json:"file_ref"`
-	URL        string `json:"url"`
-	R2Key      string `json:"r2_key"`
-	R2Deduped  bool   `json:"r2_deduped"`
-	Slug       string `json:"slug"`
+	FileRef   string `json:"file_ref"`
+	URL       string `json:"url"`
+	R2Key     string `json:"r2_key"`
+	R2Deduped bool   `json:"r2_deduped"`
+	Deduped   bool   `json:"deduped"`
+	Slug      string `json:"slug"`
+}
+
+// assetUploadResult is the normalized output of uploadAssetCore — the fields
+// both pushAsset (terminal publish) and embedLocalImages (internal) need.
+type assetUploadResult struct {
+	URL     string
+	Slug    string
+	Ref     string
+	Deduped bool
 }
 
 func detectAssetKind(filename, flagKind, flagSubstrate string) string {
@@ -282,6 +316,28 @@ func pushAsset(
 		return err
 	}
 
+	res, err := uploadAssetCore(cmd, cfg, assetKind, mimeType, filename, data, flagTitle)
+	if err != nil {
+		if ae, ok := err.(*api.Error); ok {
+			w.Error(ae.Code, ae.Message, ae.Hint)
+		} else {
+			w.Error("api_error", err.Error(), "")
+		}
+		return err
+	}
+	return finishAssetPush(w, cfg, res.URL, res.Slug, res.Ref, mimeType, assetKind, flagTitle, flagOpen)
+}
+
+// uploadAssetCore POSTs base64-encoded bytes to <kind>.upload and returns the
+// parsed result. Shared by pushAsset (terminal publish) and embedLocalImages
+// (internal embed-first rewrite). Does not print — callers render output.
+func uploadAssetCore(
+	cmd *cobra.Command,
+	cfg *config.Config,
+	assetKind, mimeType, filename string,
+	data []byte,
+	title string,
+) (assetUploadResult, error) {
 	toolName := assetKind + ".upload"
 	toolURL := strings.TrimRight(cfg.APIURL, "/") + "/api/tool/" + toolName
 	toolArgs := map[string]any{
@@ -289,17 +345,17 @@ func pushAsset(
 		"mime":           mimeType,
 		"filename":       filepath.Base(filename),
 	}
-	if flagTitle != "" {
-		toolArgs["title"] = flagTitle
+	if title != "" {
+		toolArgs["title"] = title
 	}
 	payload, err := json.Marshal(toolArgs)
 	if err != nil {
-		return fmt.Errorf("marshal asset upload args: %w", err)
+		return assetUploadResult{}, fmt.Errorf("marshal asset upload args: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, toolURL, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("creating asset upload request: %w", err)
+		return assetUploadResult{}, fmt.Errorf("creating asset upload request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
@@ -312,13 +368,13 @@ func pushAsset(
 	}
 	resp, err := httpC.Do(req)
 	if err != nil {
-		return fmt.Errorf("network error: %w", err)
+		return assetUploadResult{}, fmt.Errorf("network error: %w", err)
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("reading response: %w", err)
+		return assetUploadResult{}, fmt.Errorf("reading response: %w", err)
 	}
 	if flagVerbose {
 		fmt.Fprintf(
@@ -333,28 +389,115 @@ func pushAsset(
 
 	var envelope pushToolEnvelope
 	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return fmt.Errorf("decoding response: %w", err)
+		return assetUploadResult{}, fmt.Errorf("decoding response: %w", err)
 	}
 	if !envelope.OK {
-		return toolEnvelopeError(resp.StatusCode, envelope.Error)
+		return assetUploadResult{}, toolEnvelopeError(resp.StatusCode, envelope.Error)
 	}
 
 	switch assetKind {
 	case "image":
 		var result imageUploadResult
 		if err := json.Unmarshal(envelope.Result, &result); err != nil {
-			return fmt.Errorf("decoding image upload result: %w", err)
+			return assetUploadResult{}, fmt.Errorf("decoding image upload result: %w", err)
 		}
-		return finishAssetPush(w, cfg, result.URL, result.Slug, result.ImageRef, mimeType, "image", flagTitle, flagOpen)
+		return assetUploadResult{URL: result.URL, Slug: result.Slug, Ref: result.ImageRef, Deduped: result.Deduped}, nil
 	case "file":
 		var result fileUploadResult
 		if err := json.Unmarshal(envelope.Result, &result); err != nil {
-			return fmt.Errorf("decoding file upload result: %w", err)
+			return assetUploadResult{}, fmt.Errorf("decoding file upload result: %w", err)
 		}
-		return finishAssetPush(w, cfg, result.URL, result.Slug, result.FileRef, mimeType, "file", flagTitle, flagOpen)
+		return assetUploadResult{URL: result.URL, Slug: result.Slug, Ref: result.FileRef, Deduped: result.Deduped}, nil
 	default:
-		return fmt.Errorf("unsupported asset kind: %s", assetKind)
+		return assetUploadResult{}, fmt.Errorf("unsupported asset kind: %s", assetKind)
 	}
+}
+
+// embedLocalImages uploads every LOCAL image reference that resolves to a real
+// file (relative to docDir, or absolute) to the user's host and rewrites the
+// reference to the host URL. External / data / unresolvable refs are left
+// untouched (the server rehosts external URLs; an unresolvable relative path is
+// likely a web-relative reference we must not clobber). A genuine upload failure
+// (network / auth / server error) aborts the push.
+func embedLocalImages(
+	cmd *cobra.Command,
+	w *output.Writer,
+	cfg *config.Config,
+	docDir, content string,
+) (string, error) {
+	refs := ingest.ScanImageRefs(content)
+	if len(refs) == 0 {
+		return content, nil
+	}
+
+	replace := map[string]string{}
+	seen := map[string]string{} // resolved abs path → host URL (client-side dedup)
+	embedded := 0
+
+	for _, ref := range refs {
+		if ref.Kind != ingest.LocalRelative && ref.Kind != ingest.LocalAbsolute {
+			continue
+		}
+		abs := ref.URL
+		if ref.Kind == ingest.LocalRelative {
+			abs = filepath.Join(docDir, ref.URL)
+		}
+		abs = filepath.Clean(abs)
+
+		if url, ok := seen[abs]; ok {
+			replace[ref.URL] = url
+			continue
+		}
+
+		info, statErr := os.Stat(abs)
+		if statErr != nil || info.IsDir() {
+			continue // not a local file — leave as-is (likely a web path)
+		}
+		data, readErr := os.ReadFile(abs)
+		if readErr != nil {
+			if flagVerbose {
+				fmt.Fprintf(w.Err, "  embed skip (unreadable): %s\n", ref.URL)
+			}
+			continue
+		}
+		if int64(len(data)) > maxEmbedImageBytes {
+			if flagVerbose {
+				fmt.Fprintf(w.Err, "  embed skip (>%dMB): %s\n", maxEmbedImageBytes>>20, ref.URL)
+			}
+			continue
+		}
+		mimeType, mErr := detectAssetMIME(abs, data, "image")
+		if mErr != nil {
+			if flagVerbose {
+				fmt.Fprintf(w.Err, "  embed skip (not an image): %s\n", ref.URL)
+			}
+			continue
+		}
+		if cfg.Token == "" {
+			if flagVerbose {
+				fmt.Fprintf(w.Err, "  embed skip (login required to host local images): %s\n", ref.URL)
+			}
+			continue
+		}
+
+		res, err := uploadAssetCore(cmd, cfg, "image", mimeType, abs, data, "")
+		if err != nil {
+			if ae, ok := err.(*api.Error); ok {
+				w.Error(ae.Code, ae.Message, ae.Hint)
+			} else {
+				w.Error("api_error", fmt.Sprintf("embedding %s: %v", ref.URL, err), "")
+			}
+			return "", err
+		}
+		seen[abs] = res.URL
+		replace[ref.URL] = res.URL
+		embedded++
+	}
+
+	if embedded > 0 && flagVerbose {
+		fmt.Fprintf(w.Err, "  embedded %d local image(s)\n", embedded)
+	}
+	return ingest.RewriteRefs(content, refs, replace), nil
 }
 
 func detectAssetMIME(filename string, data []byte, assetKind string) (string, error) {
@@ -434,11 +577,11 @@ func finishAssetPush(
 
 	w.OK(
 		map[string]any{
-			"url":  publishedURL,
-			"slug": slug,
-			"ref":  ref,
-			"kind": kind,
-			"mime": mimeType,
+			"url":   publishedURL,
+			"slug":  slug,
+			"ref":   ref,
+			"kind":  kind,
+			"mime":  mimeType,
 			"title": title,
 		},
 		output.WithSummary("Published %s (%s)", publishedURL, kind),

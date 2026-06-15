@@ -7,10 +7,204 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pura-labs/cli/internal/api"
 )
+
+// embedTestServer records image.upload calls and captures the /api/p body so
+// embed-first tests can assert what got uploaded + how content was rewritten.
+type embedTestServer struct {
+	uploads       int
+	createBody    api.CreateRequest
+	uploadHostURL string
+}
+
+func newEmbedServer(t *testing.T) (*httptest.Server, *embedTestServer) {
+	state := &embedTestServer{uploadHostURL: "https://i.pura.so/u/abc.png"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/tool/image.upload":
+			state.uploads++
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok": true,
+				"result": map[string]any{
+					"image_ref": "@a/x", "url": state.uploadHostURL,
+					"r2_key": "assets/u/abc.png", "slug": "x", "deduped": false,
+				},
+			})
+		case "/api/p":
+			_ = json.NewDecoder(r.Body).Decode(&state.createBody)
+			_ = json.NewEncoder(w).Encode(api.ApiResponse[api.CreateResponse]{
+				OK:   true,
+				Data: api.CreateResponse{Slug: "doc1", Token: "t", URL: "https://pura.so/@a/doc1", Kind: "doc", Substrate: "markdown"},
+			})
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	return srv, state
+}
+
+func TestPushCommand_EmbedsLocalImage(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	srv, state := newEmbedServer(t)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pic.png"), []byte("PNGDATA"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	doc := filepath.Join(dir, "post.md")
+	if err := os.WriteFile(doc, []byte("# T\n\n![hero](./pic.png)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if state.uploads != 1 {
+		t.Fatalf("image.upload calls = %d, want 1", state.uploads)
+	}
+	if !strings.Contains(state.createBody.Content, state.uploadHostURL) {
+		t.Fatalf("content not rewritten to host URL: %q", state.createBody.Content)
+	}
+	if strings.Contains(state.createBody.Content, "./pic.png") {
+		t.Fatalf("local path still present: %q", state.createBody.Content)
+	}
+}
+
+func TestPushCommand_EmbedDedupsRepeatedImage(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	srv, state := newEmbedServer(t)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pic.png"), []byte("PNGDATA"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	doc := filepath.Join(dir, "post.md")
+	if err := os.WriteFile(doc, []byte("![a](./pic.png)\n\n![b](./pic.png)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if state.uploads != 1 {
+		t.Fatalf("image.upload calls = %d, want 1 (deduped)", state.uploads)
+	}
+	if strings.Count(state.createBody.Content, state.uploadHostURL) != 2 {
+		t.Fatalf("both refs should be rewritten: %q", state.createBody.Content)
+	}
+}
+
+func TestPushCommand_ExternalURLLeftUntouched(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	var uploads int
+	var createBody api.CreateRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/tool/image.upload":
+			uploads++
+			t.Error("external URL must not be uploaded by the CLI")
+		case "/api/p":
+			_ = json.NewDecoder(r.Body).Decode(&createBody)
+			_ = json.NewEncoder(w).Encode(api.ApiResponse[api.CreateResponse]{
+				OK: true, Data: api.CreateResponse{Slug: "d", Token: "t", URL: "https://pura.so/@a/d", Kind: "doc", Substrate: "markdown"},
+			})
+		}
+	}))
+	defer srv.Close()
+
+	doc := filepath.Join(t.TempDir(), "post.md")
+	if err := os.WriteFile(doc, []byte("![x](https://example.com/x.png)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if uploads != 0 {
+		t.Fatalf("uploads = %d, want 0", uploads)
+	}
+	if !strings.Contains(createBody.Content, "https://example.com/x.png") {
+		t.Fatalf("external URL should survive: %q", createBody.Content)
+	}
+}
+
+func TestPushCommand_NoEmbedLeavesLocalPaths(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	srv, state := newEmbedServer(t)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pic.png"), []byte("PNGDATA"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	doc := filepath.Join(dir, "post.md")
+	if err := os.WriteFile(doc, []byte("![a](./pic.png)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok", "--no-embed"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if state.uploads != 0 {
+		t.Fatalf("--no-embed should skip uploads, got %d", state.uploads)
+	}
+	if !strings.Contains(state.createBody.Content, "./pic.png") {
+		t.Fatalf("--no-embed should keep local path: %q", state.createBody.Content)
+	}
+}
+
+func TestPushCommand_EmbedSkipsMissingLocalFile(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	srv, state := newEmbedServer(t)
+	defer srv.Close()
+
+	// ./missing.png does not exist — treated as a (likely web-relative) path and
+	// left untouched, NOT an error.
+	doc := filepath.Join(t.TempDir(), "post.md")
+	if err := os.WriteFile(doc, []byte("![x](./missing.png)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("push should not fail on a missing local image: %v", err)
+	}
+	if state.uploads != 0 {
+		t.Fatalf("uploads = %d, want 0", state.uploads)
+	}
+	if !strings.Contains(state.createBody.Content, "./missing.png") {
+		t.Fatalf("unresolvable path should survive: %q", state.createBody.Content)
+	}
+}
 
 func TestPushCommand_Success(t *testing.T) {
 	resetCommandGlobals()
@@ -222,11 +416,11 @@ func TestPushCommand_ImageAssetUsesUploadTool(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok": true,
 			"result": map[string]any{
-				"image_ref":   "@alice/photo",
-				"url":         "https://pura.so/@alice/photo",
-				"r2_key":      "assets/u/photo.jpg",
-				"r2_deduped":  false,
-				"slug":        "photo",
+				"image_ref":  "@alice/photo",
+				"url":        "https://pura.so/@alice/photo",
+				"r2_key":     "assets/u/photo.jpg",
+				"r2_deduped": false,
+				"slug":       "photo",
 			},
 		})
 	}))
@@ -277,11 +471,11 @@ func TestPushCommand_ExplicitFileKindUsesUploadTool(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok": true,
 			"result": map[string]any{
-				"file_ref":    "@alice/data",
-				"url":         "https://pura.so/@alice/data",
-				"r2_key":      "assets/u/data.csv",
-				"r2_deduped":  false,
-				"slug":        "data",
+				"file_ref":   "@alice/data",
+				"url":        "https://pura.so/@alice/data",
+				"r2_key":     "assets/u/data.csv",
+				"r2_deduped": false,
+				"slug":       "data",
 			},
 		})
 	}))

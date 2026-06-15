@@ -82,6 +82,7 @@ func init() {
 		newToolCmd(),
 		newSheetCmd(),
 		newBookCmd(),
+		newImageCmd(),
 		newSurfaceCmd(),
 	)
 }

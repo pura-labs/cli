@@ -1,0 +1,19 @@
+Delete an image. Blocked (409 in_use) when documents still embed it; pass --force to delete anyway.
+
+Usage:
+  pura image rm <slug> [flags]
+
+Flags:
+      --force   Delete even if documents still embed the image
+  -h, --help    help for rm
+  -y, --yes     Skip confirmation
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output

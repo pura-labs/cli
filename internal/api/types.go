@@ -90,6 +90,23 @@ type UpdateRequest struct {
 	Theme   string `json:"theme,omitempty"`
 }
 
+// ImageListItem is one entry in the `image.list` tool result — the user's
+// image library (图床) with a usage count.
+type ImageListItem struct {
+	Slug       string   `json:"slug"`
+	Title      string   `json:"title,omitempty"`
+	URL        string   `json:"url"`
+	Mime       string   `json:"mime,omitempty"`
+	Bytes      int64    `json:"bytes,omitempty"`
+	Width      int      `json:"width,omitempty"`
+	Height     int      `json:"height,omitempty"`
+	Alt        string   `json:"alt,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	Filename   string   `json:"filename,omitempty"`
+	UsageCount int      `json:"usage_count"`
+	UpdatedAt  string   `json:"updated_at,omitempty"`
+}
+
 // -------- Auth / device-flow --------
 
 // DeviceStartRequest asks the server to open a new device-flow session.

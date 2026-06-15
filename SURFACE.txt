@@ -55,6 +55,14 @@ pura events  — List activity events for a document
 pura get  — Get a document
     -f/--format <string>  Output format (raw|ctx|meta)
     -o/--output <string>  Save to file
+pura image  — Manage your image library (图床)
+pura image get  — Show an image's URL and metadata
+pura image ls  — List your image library
+    --limit <int>  Max images to list (default 50, max 200)
+    -q/--query <string>  Filter by title / filename / alt / tags
+pura image rm  — Delete an image from your library
+    --force  Delete even if documents still embed the image
+    -y/--yes  Skip confirmation
 pura keys  — Manage API keys
 pura keys create  — Create a new API key
     --scope <stringSlice>  Scope to grant (repeatable). Default: docs:read,docs:write
@@ -103,6 +111,7 @@ pura present  — Open a slides deck in presentation mode
 pura preview  — Preview a file before publishing
 pura push  — Publish a document
     --kind <string>  Primitive kind (doc|sheet|page|slides|canvas|image|file|book) — overrides the kind derived from --substrate
+    --no-embed  Do not upload/rewrite local image references; publish paths as-is
     --stdin  Read content from stdin
     --substrate <string>  Wire format (markdown|html|csv|json|svg|canvas|ascii) — auto-detected from content when omitted
     --theme <string>  Theme preset
