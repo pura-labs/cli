@@ -451,33 +451,42 @@ func embedLocalImages(
 
 		info, statErr := os.Stat(abs)
 		if statErr != nil || info.IsDir() {
-			continue // not a local file — leave as-is (likely a web path)
+			// An absolute path that doesn't resolve is ambiguous (likely a
+			// site-root web path like /static/x.png) — leave it untouched. A
+			// RELATIVE path that doesn't resolve is almost certainly a broken
+			// local reference; fail rather than publish a dead link.
+			if ref.Kind == ingest.LocalAbsolute {
+				continue
+			}
+			w.Error("not_found",
+				fmt.Sprintf("image not found: %s (looked in %s)", ref.URL, abs),
+				"Fix the path, or pass --no-embed to publish references as-is")
+			return "", &api.Error{Status: 404, Code: "not_found", Message: "image not found: " + ref.URL}
 		}
 		data, readErr := os.ReadFile(abs)
 		if readErr != nil {
-			if flagVerbose {
-				fmt.Fprintf(w.Err, "  embed skip (unreadable): %s\n", ref.URL)
-			}
-			continue
+			w.Error("read_error", fmt.Sprintf("cannot read image: %s", ref.URL),
+				"Check file permissions, or pass --no-embed")
+			return "", readErr
 		}
 		if int64(len(data)) > maxEmbedImageBytes {
-			if flagVerbose {
-				fmt.Fprintf(w.Err, "  embed skip (>%dMB): %s\n", maxEmbedImageBytes>>20, ref.URL)
-			}
-			continue
+			w.Error("validation",
+				fmt.Sprintf("image too large (%d bytes, max %d): %s", len(data), maxEmbedImageBytes, ref.URL),
+				"Compress it, or pass --no-embed")
+			return "", &api.Error{Status: 400, Code: "validation", Message: "image too large: " + ref.URL}
 		}
 		mimeType, mErr := detectAssetMIME(abs, data, "image")
 		if mErr != nil {
-			if flagVerbose {
-				fmt.Fprintf(w.Err, "  embed skip (not an image): %s\n", ref.URL)
-			}
-			continue
+			w.Error("validation",
+				fmt.Sprintf("not a supported image: %s (%v)", ref.URL, mErr),
+				"Use png/jpg/webp/gif, or pass --no-embed")
+			return "", &api.Error{Status: 400, Code: "validation", Message: "not an image: " + ref.URL}
 		}
 		if cfg.Token == "" {
-			if flagVerbose {
-				fmt.Fprintf(w.Err, "  embed skip (login required to host local images): %s\n", ref.URL)
-			}
-			continue
+			w.Error("unauthorized",
+				fmt.Sprintf("hosting local image %s requires sign-in", ref.URL),
+				"Run `pura auth login`, or pass --no-embed to publish the local path as-is")
+			return "", &api.Error{Status: 401, Code: "unauthorized", Message: "sign-in required to embed local images"}
 		}
 
 		res, err := uploadAssetCore(cmd, cfg, "image", mimeType, abs, data, "")

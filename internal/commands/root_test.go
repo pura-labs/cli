@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pura-labs/cli/internal/config"
+	"github.com/spf13/pflag"
 )
 
 // resetCommandGlobals is the single entry point tests use to zero every
@@ -33,6 +34,23 @@ func resetCommandGlobals() {
 	resetMcpFlags()
 	resetToolFlags()
 	resetSheetFlags()
+	resetPushFlags()
+}
+
+// resetPushFlags clears push's function-local flags (notably --no-embed) on the
+// shared cobra command instance, which otherwise stay "Changed" and bleed into
+// the next subtest. Scoped to the push subcommand so it can't disturb other
+// commands' flag state.
+func resetPushFlags() {
+	for _, c := range rootCmd.Commands() {
+		if c.Name() != "push" {
+			continue
+		}
+		c.LocalFlags().VisitAll(func(f *pflag.Flag) {
+			_ = f.Value.Set(f.DefValue)
+			f.Changed = false
+		})
+	}
 }
 
 // writeCredsFile emits a credentials.json in the v1 schema.

@@ -74,6 +74,33 @@ func surfaceToolError(w *output.Writer, err error) {
 	}
 }
 
+// resolveOwnHandle figures out the caller's handle for building @handle/slug
+// refs: --handle flag, then the stored config, then a /api/auth/me lookup
+// (covers api_key users who authenticated via --token and never pushed, so no
+// handle is cached locally). Falling back to the anonymous "_" would wrongly
+// look up anon-namespace items, so we resolve it properly instead.
+func resolveOwnHandle(cmd *cobra.Command, cfg *config.Config) (string, error) {
+	if flagHandle != "" {
+		return strings.TrimPrefix(flagHandle, "@"), nil
+	}
+	if cfg.Handle != "" {
+		return cfg.Handle, nil
+	}
+	me, err := newClient(cmd, cfg).Me()
+	if err != nil {
+		return "", err
+	}
+	if me.Handle == "" {
+		return "", &api.Error{
+			Status:  400,
+			Code:    "validation",
+			Message: "your account has no handle yet",
+			Hint:    "Publish something first (pura push …) so a handle is assigned.",
+		}
+	}
+	return me.Handle, nil
+}
+
 func newImageLsCmd() *cobra.Command {
 	var (
 		flagLimit int
@@ -166,12 +193,10 @@ func newImageRmCmd() *cobra.Command {
 				w.Error("unauthorized", "Deleting images requires authentication", "Run `pura auth login`")
 				return fmt.Errorf("no token")
 			}
-			handle := flagHandle
-			if handle == "" {
-				handle = cfg.Handle
-			}
-			if handle == "" {
-				handle = api.AnonymousHandle
+			handle, err := resolveOwnHandle(cmd, cfg)
+			if err != nil {
+				surfaceToolError(w, err)
+				return err
 			}
 
 			// --yes OR --force skip the prompt; --force additionally overrides
@@ -282,12 +307,10 @@ func newImageGetCmd() *cobra.Command {
 				w.Error("unauthorized", "Reading images requires authentication", "Run `pura auth login`")
 				return fmt.Errorf("no token")
 			}
-			handle := flagHandle
-			if handle == "" {
-				handle = cfg.Handle
-			}
-			if handle == "" {
-				handle = api.AnonymousHandle
+			handle, err := resolveOwnHandle(cmd, cfg)
+			if err != nil {
+				surfaceToolError(w, err)
+				return err
 			}
 
 			raw, err := callTool(cmd, cfg, "image.read", map[string]any{"image_ref": "@" + handle + "/" + slug})

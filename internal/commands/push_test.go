@@ -179,7 +179,38 @@ func TestPushCommand_NoEmbedLeavesLocalPaths(t *testing.T) {
 	}
 }
 
-func TestPushCommand_EmbedSkipsMissingLocalFile(t *testing.T) {
+func TestPushCommand_EmbedErrorsOnMissingRelativeImage(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	var createCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/p" {
+			createCalled = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": map[string]any{}})
+	}))
+	defer srv.Close()
+
+	// ./missing.png is a relative ref that doesn't resolve — fail rather than
+	// publish a dead link.
+	doc := filepath.Join(t.TempDir(), "post.md")
+	if err := os.WriteFile(doc, []byte("![x](./missing.png)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for a missing relative local image")
+	}
+	if createCalled {
+		t.Fatal("doc must NOT be published when a local image is missing")
+	}
+}
+
+func TestPushCommand_EmbedLeavesAbsoluteWebPath(t *testing.T) {
 	resetCommandGlobals()
 	defer resetCommandGlobals()
 	t.Setenv("HOME", t.TempDir())
@@ -187,22 +218,57 @@ func TestPushCommand_EmbedSkipsMissingLocalFile(t *testing.T) {
 	srv, state := newEmbedServer(t)
 	defer srv.Close()
 
-	// ./missing.png does not exist — treated as a (likely web-relative) path and
-	// left untouched, NOT an error.
+	// /static/logo.png is absolute and doesn't resolve to a file — ambiguous
+	// (likely a site-root web path), so it's left untouched, NOT an error.
 	doc := filepath.Join(t.TempDir(), "post.md")
-	if err := os.WriteFile(doc, []byte("![x](./missing.png)\n"), 0644); err != nil {
+	if err := os.WriteFile(doc, []byte("![x](/static/logo.png)\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	cmd := rootCmd
 	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok"})
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("push should not fail on a missing local image: %v", err)
+		t.Fatalf("absolute web path should not fail the push: %v", err)
 	}
 	if state.uploads != 0 {
 		t.Fatalf("uploads = %d, want 0", state.uploads)
 	}
-	if !strings.Contains(state.createBody.Content, "./missing.png") {
-		t.Fatalf("unresolvable path should survive: %q", state.createBody.Content)
+	if !strings.Contains(state.createBody.Content, "/static/logo.png") {
+		t.Fatalf("absolute web path should survive: %q", state.createBody.Content)
+	}
+}
+
+func TestPushCommand_EmbedErrorsOnOversizeLocalImage(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	var createCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/p" {
+			createCalled = true
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	big := make([]byte, (10<<20)+1) // just over the 10 MiB client cap
+	copy(big, []byte("\x89PNG\r\n\x1a\n"))
+	if err := os.WriteFile(filepath.Join(dir, "huge.png"), big, 0644); err != nil {
+		t.Fatal(err)
+	}
+	doc := filepath.Join(dir, "post.md")
+	if err := os.WriteFile(doc, []byte("![x](./huge.png)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected error for an oversize local image")
+	}
+	if createCalled {
+		t.Fatal("doc must NOT be published when a local image is oversize")
 	}
 }
 
@@ -496,6 +562,7 @@ func TestPushCommand_ExplicitFileKindUsesUploadTool(t *testing.T) {
 func TestPushCommand_AssetUploadRequiresAuth(t *testing.T) {
 	resetCommandGlobals()
 	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir()) // isolate from the dev machine's real credentials
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatalf("unexpected network call to %s", r.URL.Path)
