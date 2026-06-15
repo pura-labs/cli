@@ -83,22 +83,24 @@ func resolveOwnHandle(cmd *cobra.Command, cfg *config.Config) (string, error) {
 	if flagHandle != "" {
 		return strings.TrimPrefix(flagHandle, "@"), nil
 	}
+	// Prefer the server's view of the authenticated user. The locally cached
+	// cfg.Handle can be stale (a wrong handle builds @wrong/slug → not_found),
+	// so trust /api/auth/me when we have a token; fall back to the cache only
+	// when the lookup fails (e.g. offline).
+	if cfg.Token != "" {
+		if me, err := newClient(cmd, cfg).Me(); err == nil && me.Handle != "" {
+			return me.Handle, nil
+		}
+	}
 	if cfg.Handle != "" {
 		return cfg.Handle, nil
 	}
-	me, err := newClient(cmd, cfg).Me()
-	if err != nil {
-		return "", err
+	return "", &api.Error{
+		Status:  400,
+		Code:    "validation",
+		Message: "your account has no handle yet",
+		Hint:    "Publish something first (pura push …) so a handle is assigned.",
 	}
-	if me.Handle == "" {
-		return "", &api.Error{
-			Status:  400,
-			Code:    "validation",
-			Message: "your account has no handle yet",
-			Hint:    "Publish something first (pura push …) so a handle is assigned.",
-		}
-	}
-	return me.Handle, nil
 }
 
 func newImageLsCmd() *cobra.Command {
