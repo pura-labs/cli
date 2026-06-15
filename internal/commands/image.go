@@ -336,7 +336,7 @@ func newImageGetCmd() *cobra.Command {
 
 			w.OK(img,
 				output.WithSummary("%s (%s)", slug, humanBytes(img.Bytes)),
-				output.WithBreadcrumb("open", "pura open "+slug, "Open in browser"),
+				output.WithBreadcrumb("open", fmt.Sprintf("pura open @%s/%s", handle, slug), "Open in browser"),
 				output.WithBreadcrumb("rm", "pura image rm "+slug, "Delete"))
 			w.Print("  URL:      %s\n", img.URL)
 			if img.Width > 0 && img.Height > 0 {

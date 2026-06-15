@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pura-labs/cli/internal/config"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -35,6 +36,10 @@ func resetCommandGlobals() {
 	resetToolFlags()
 	resetSheetFlags()
 	resetPushFlags()
+	resetImageFlags()
+	resetCommandLocalFlags("get")
+	resetCommandLocalFlags("edit")
+	resetCommandLocalFlags("rm")
 }
 
 // resetPushFlags clears push's function-local flags (notably --no-embed) on the
@@ -50,6 +55,29 @@ func resetPushFlags() {
 			_ = f.Value.Set(f.DefValue)
 			f.Changed = false
 		})
+	}
+}
+
+func resetImageFlags() {
+	resetCommandLocalFlags("image")
+}
+
+func resetCommandLocalFlags(name string) {
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == name {
+			resetLocalFlagTree(c)
+			return
+		}
+	}
+}
+
+func resetLocalFlagTree(cmd *cobra.Command) {
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	})
+	for _, sub := range cmd.Commands() {
+		resetLocalFlagTree(sub)
 	}
 }
 

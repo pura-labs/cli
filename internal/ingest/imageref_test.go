@@ -53,6 +53,19 @@ func TestScanImageRefs_HTMLImg(t *testing.T) {
 	}
 }
 
+func TestScanImageRefs_IgnoresMarkdownCode(t *testing.T) {
+	content := "```markdown\n![code](./code.png)\n<img src=\"./code-html.png\">\n```\n" +
+		"real ![ok](./ok.png) and `![inline](./inline.png)`\n" +
+		"~~~\n![tilde](./tilde.png)\n~~~\n"
+	refs := ScanImageRefs(content)
+	if len(refs) != 1 {
+		t.Fatalf("want 1 real ref, got %d: %+v", len(refs), refs)
+	}
+	if refs[0].URL != "./ok.png" {
+		t.Fatalf("URL = %q, want ./ok.png", refs[0].URL)
+	}
+}
+
 func TestRewriteRefs_OffsetAnchored(t *testing.T) {
 	// The literal path also appears in body prose; only the image ref must change.
 	content := "see ./pic.png below\n\n![p](./pic.png)\n"

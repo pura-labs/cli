@@ -78,9 +78,13 @@ func Classify(u string) RefKind {
 // ambiguous; documented limitation.
 func ScanImageRefs(content string) []Ref {
 	var refs []Ref
+	ignored := markdownCodeMask(content)
 	add := func(matches [][]int, syntax Syntax) {
 		for _, m := range matches {
 			s, e := m[2], m[3]
+			if ignored[s] {
+				continue
+			}
 			u := content[s:e]
 			refs = append(refs, Ref{URL: u, Start: s, End: e, Kind: Classify(u), Syntax: syntax})
 		}
@@ -88,6 +92,100 @@ func ScanImageRefs(content string) []Ref {
 	add(mdImageRe.FindAllStringSubmatchIndex(content, -1), MarkdownInline)
 	add(htmlImgRe.FindAllStringSubmatchIndex(content, -1), HTMLImg)
 	return refs
+}
+
+func markdownCodeMask(content string) []bool {
+	mask := make([]bool, len(content))
+	mark := func(start, end int) {
+		if start < 0 {
+			start = 0
+		}
+		if end > len(mask) {
+			end = len(mask)
+		}
+		for i := start; i < end; i++ {
+			mask[i] = true
+		}
+	}
+
+	inFence := false
+	fenceStart := 0
+	fenceChar := byte(0)
+	fenceLen := 0
+	for lineStart := 0; lineStart < len(content); {
+		next := strings.IndexByte(content[lineStart:], '\n')
+		lineEnd := len(content)
+		if next >= 0 {
+			lineEnd = lineStart + next + 1
+		}
+		line := strings.TrimSuffix(content[lineStart:lineEnd], "\n")
+		if !inFence {
+			if ch, n, ok := fenceMarker(line); ok {
+				inFence = true
+				fenceStart = lineStart
+				fenceChar = ch
+				fenceLen = n
+			}
+		} else if ch, n, ok := fenceMarker(line); ok && ch == fenceChar && n >= fenceLen {
+			mark(fenceStart, lineEnd)
+			inFence = false
+		}
+		lineStart = lineEnd
+	}
+	if inFence {
+		mark(fenceStart, len(content))
+	}
+
+	for i := 0; i < len(content); {
+		if mask[i] || content[i] != '`' {
+			i++
+			continue
+		}
+		n := countRun(content, i, '`')
+		if end := findBacktickRun(content, i+n, n, mask); end >= 0 {
+			mark(i, end+n)
+			i = end + n
+			continue
+		}
+		i += n
+	}
+	return mask
+}
+
+func fenceMarker(line string) (byte, int, bool) {
+	indent := 0
+	for indent < len(line) && line[indent] == ' ' {
+		indent++
+	}
+	if indent > 3 || indent >= len(line) {
+		return 0, 0, false
+	}
+	ch := line[indent]
+	if ch != '`' && ch != '~' {
+		return 0, 0, false
+	}
+	n := countRun(line, indent, ch)
+	return ch, n, n >= 3
+}
+
+func countRun(s string, start int, ch byte) int {
+	n := 0
+	for start+n < len(s) && s[start+n] == ch {
+		n++
+	}
+	return n
+}
+
+func findBacktickRun(content string, start, want int, mask []bool) int {
+	for i := start; i < len(content); i++ {
+		if mask[i] || content[i] != '`' {
+			continue
+		}
+		if countRun(content, i, '`') == want {
+			return i
+		}
+	}
+	return -1
 }
 
 // RewriteRefs replaces each ref's URL token with replace[ref.URL] (when present),

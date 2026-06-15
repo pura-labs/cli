@@ -166,9 +166,29 @@ func TestImageGet_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cmd := rootCmd
-	cmd.SetArgs([]string{"image", "get", "photo", "--handle", "alice", "--api-url", srv.URL, "--token", "tok", "--json"})
-	if err := cmd.Execute(); err != nil {
+	out, err := runCmd(t, "image", "get", "photo", "--handle", "alice", "--api-url", srv.URL, "--token", "tok", "--json")
+	if err != nil {
 		t.Fatalf("image get: %v", err)
+	}
+	var env struct {
+		Breadcrumbs []struct {
+			Action string `json:"action"`
+			Cmd    string `json:"cmd"`
+		} `json:"breadcrumbs"`
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, out)
+	}
+	foundOpen := false
+	for _, b := range env.Breadcrumbs {
+		if b.Action == "open" && b.Cmd != "pura open @alice/photo" {
+			t.Fatalf("open breadcrumb = %q, want namespaced ref", b.Cmd)
+		}
+		if b.Action == "open" {
+			foundOpen = true
+		}
+	}
+	if !foundOpen {
+		t.Fatalf("missing open breadcrumb: %+v", env.Breadcrumbs)
 	}
 }

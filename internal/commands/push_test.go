@@ -150,6 +150,99 @@ func TestPushCommand_ExternalURLLeftUntouched(t *testing.T) {
 	}
 }
 
+func TestPushCommand_CSVDoesNotEmbedMarkdownLookingImage(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	var uploads int
+	var createBody api.CreateRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/tool/image.upload":
+			uploads++
+			t.Error("csv content must not be scanned for local markdown images")
+		case "/api/p":
+			_ = json.NewDecoder(r.Body).Decode(&createBody)
+			_ = json.NewEncoder(w).Encode(api.ApiResponse[api.CreateResponse]{
+				OK: true, Data: api.CreateResponse{Slug: "d", Token: "t", URL: "https://pura.so/@a/d", Kind: "sheet", Substrate: "csv"},
+			})
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	doc := filepath.Join(t.TempDir(), "rows.csv")
+	content := "name,note\nalice,![x](./missing.png)\n"
+	if err := os.WriteFile(doc, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--api-url", srv.URL, "--token", "tok"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("push csv: %v", err)
+	}
+	if uploads != 0 {
+		t.Fatalf("uploads = %d, want 0", uploads)
+	}
+	if createBody.Content != strings.TrimSpace(content) {
+		t.Fatalf("content should be unchanged:\n got %q\nwant %q", createBody.Content, strings.TrimSpace(content))
+	}
+	if createBody.Substrate != "csv" {
+		t.Fatalf("Substrate = %q, want csv", createBody.Substrate)
+	}
+}
+
+func TestPushCommand_SheetKindDoesNotEmbedMarkdownLookingImage(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+	t.Setenv("HOME", t.TempDir())
+
+	var uploads int
+	var createBody api.CreateRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/tool/image.upload":
+			uploads++
+			t.Error("sheet kind must not be scanned for local markdown images")
+		case "/api/p":
+			_ = json.NewDecoder(r.Body).Decode(&createBody)
+			_ = json.NewEncoder(w).Encode(api.ApiResponse[api.CreateResponse]{
+				OK: true, Data: api.CreateResponse{Slug: "s", Token: "t", URL: "https://pura.so/@a/s", Kind: "sheet", Substrate: "csv"},
+			})
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	doc := filepath.Join(t.TempDir(), "rows.md")
+	content := "![x](./missing.png)\n"
+	if err := os.WriteFile(doc, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := rootCmd
+	cmd.SetArgs([]string{"push", doc, "--kind", "sheet", "--api-url", srv.URL, "--token", "tok"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("push --kind sheet: %v", err)
+	}
+	if uploads != 0 {
+		t.Fatalf("uploads = %d, want 0", uploads)
+	}
+	if createBody.Content != strings.TrimSpace(content) {
+		t.Fatalf("content should be unchanged:\n got %q\nwant %q", createBody.Content, strings.TrimSpace(content))
+	}
+	if createBody.Kind != "sheet" {
+		t.Fatalf("Kind = %q, want sheet", createBody.Kind)
+	}
+	if createBody.Substrate != "" {
+		t.Fatalf("Substrate = %q, want empty when only --kind is provided", createBody.Substrate)
+	}
+}
+
 func TestPushCommand_NoEmbedLeavesLocalPaths(t *testing.T) {
 	resetCommandGlobals()
 	defer resetCommandGlobals()

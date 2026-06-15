@@ -81,11 +81,20 @@ func newPushCmd() *cobra.Command {
 				return fmt.Errorf("empty content")
 			}
 
+			// Detect before embed rewriting so non-document substrates (csv,
+			// json, svg, canvas) cannot be mistaken for markdown just because
+			// they contain markdown-looking text.
+			detectedSubstrate := flagSubstrate
+			if detectedSubstrate == "" {
+				detectedSubstrate = detect.Type(filename, content)
+			}
+
 			// Embed-first: upload local image references to the user's host and
 			// rewrite them to host URLs before publishing, so the doc is
-			// self-contained. External http(s) URLs are left for the server to
-			// rehost. --no-embed opts out.
-			if !flagNoEmbed {
+			// self-contained. Only markdown/html-like primitives can contain
+			// references the CLI should rewrite; external http(s) URLs are left
+			// for the server to rehost. --no-embed opts out.
+			if !flagNoEmbed && shouldEmbedLocalImages(flagKind, detectedSubstrate) {
 				docDir, _ := os.Getwd()
 				if filename != "" {
 					docDir = filepath.Dir(absPath(filename))
@@ -103,7 +112,7 @@ func newPushCmd() *cobra.Command {
 			// by filename+content.
 			docSubstrate := flagSubstrate
 			if docSubstrate == "" && flagKind == "" {
-				docSubstrate = detect.Type(filename, content)
+				docSubstrate = detectedSubstrate
 			}
 
 			client := newClient(cmd, cfg)
@@ -287,6 +296,15 @@ func detectAssetKind(filename, flagKind, flagSubstrate string) string {
 		return "file"
 	}
 	return ""
+}
+
+func shouldEmbedLocalImages(kind, substrate string) bool {
+	switch kind {
+	case "", "doc", "page", "slides":
+		return substrate == "markdown" || substrate == "html"
+	default:
+		return false
+	}
 }
 
 func pushAsset(
