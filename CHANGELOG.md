@@ -11,7 +11,10 @@ by goreleaser.
   for your OS/arch straight from GitHub releases (same source as install.sh),
   verifies sha256 against `checksums.txt`, and atomically replaces the running
   binary. No sign-in. `--check` (report only), `--force` (reinstall when latest),
-  `--version vX.Y.Z` (pin / downgrade).
+  `--version vX.Y.Z` (pin / downgrade). Resolves "latest" via the
+  `releases/latest` redirect rather than the GitHub API, so it no longer trips
+  the unauthenticated API rate limit (HTTP 403); a build already at or ahead of
+  the latest release is a no-op (never silently downgrades).
 
 ### Changed
 - The bundled skill now documents the image host (`pura image`, embed-first

@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,13 +31,44 @@ const (
 	maxUpgradeSize = 200 * 1024 * 1024
 )
 
-// Overridable in tests to point at an httptest server.
-var (
-	githubAPIBase      = "https://api.github.com"
-	githubDownloadBase = "https://github.com"
-)
+// Overridable in tests to point at an httptest server. We resolve the latest
+// tag from this base too (via the /releases/latest redirect), so a public
+// upgrade never touches api.github.com — that endpoint's 60-req/hr
+// unauthenticated rate limit is the usual cause of an HTTP 403 mid-session.
+var githubDownloadBase = "https://github.com"
 
 func normalizeVer(v string) string { return strings.TrimPrefix(strings.TrimSpace(v), "v") }
+
+// semverParts splits "1.2.3" (or "1.2.3-rc1") into [3]int{1,2,3}; missing or
+// non-numeric components read as 0. Good enough to compare release tags.
+func semverParts(v string) [3]int {
+	var out [3]int
+	for i, f := range strings.SplitN(normalizeVer(v), ".", 3) {
+		if i > 2 {
+			break
+		}
+		end := 0
+		for end < len(f) && f[end] >= '0' && f[end] <= '9' {
+			end++
+		}
+		out[i], _ = strconv.Atoi(f[:end])
+	}
+	return out
+}
+
+// compareSemver returns -1 if a<b, 0 if equal, +1 if a>b.
+func compareSemver(a, b string) int {
+	pa, pb := semverParts(a), semverParts(b)
+	for i := 0; i < 3; i++ {
+		switch {
+		case pa[i] < pb[i]:
+			return -1
+		case pa[i] > pb[i]:
+			return 1
+		}
+	}
+	return 0
+}
 
 func newUpgradeCmd() *cobra.Command {
 	var (
@@ -62,6 +93,9 @@ checksums.txt, and atomically replaces the running binary.
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			w := newWriter()
 
+			// An explicit --version pins a tag and may intentionally downgrade;
+			// the bare `pura upgrade` resolves "latest" and must never downgrade.
+			explicitVersion := false
 			tag := strings.TrimSpace(wantVersion)
 			if tag == "" || tag == "latest" {
 				resolved, err := latestReleaseTag(cmd.Context())
@@ -71,6 +105,8 @@ checksums.txt, and atomically replaces the running binary.
 					return err
 				}
 				tag = resolved
+			} else {
+				explicitVersion = true
 			}
 			if !strings.HasPrefix(tag, "v") {
 				tag = "v" + tag
@@ -78,24 +114,40 @@ checksums.txt, and atomically replaces the running binary.
 
 			current := normalizeVer(versionStr)
 			latest := normalizeVer(tag)
+			// "dev" builds (no ldflags) have no real version → always behind.
+			cmp := -1
+			if current != "dev" {
+				cmp = compareSemver(current, latest)
+			}
 
 			if check {
-				w.OK(map[string]any{"current": current, "latest": latest, "up_to_date": current == latest},
+				// "up to date" for scripting = at or ahead of latest (no upgrade needed).
+				w.OK(map[string]any{"current": current, "latest": latest, "up_to_date": cmp >= 0},
 					output.WithSummary("current v%s · latest v%s", current, latest))
 				w.Print("  current: v%s\n  latest:  v%s\n", current, latest)
-				if current == latest {
+				switch {
+				case current == "dev":
+					w.Print("  → dev build; run `pura upgrade` to install v%s\n", latest)
+				case cmp == 0:
 					w.Print("  ✓ up to date\n")
-				} else {
+				case cmp > 0:
+					w.Print("  ✓ ahead of the latest release (local / pre-release build)\n")
+				default:
 					w.Print("  → run `pura upgrade`\n")
 				}
 				return nil
 			}
 
-			// "dev" builds (no ldflags) always upgrade — they have no real version.
-			if !force && current != "dev" && current == latest {
+			// Default upgrade never downgrades: no-op when already at/ahead of
+			// latest. --version (explicit) and --force bypass this.
+			if !force && !explicitVersion && cmp >= 0 {
 				w.OK(map[string]any{"current": current, "latest": latest, "up_to_date": true},
-					output.WithSummary("Already on the latest version (v%s)", latest))
-				w.Print("  ✓ already latest v%s  (use --force to reinstall)\n", latest)
+					output.WithSummary("Already on v%s (latest release is v%s)", current, latest))
+				if cmp > 0 {
+					w.Print("  ✓ v%s is ahead of the latest release v%s — nothing to do\n", current, latest)
+				} else {
+					w.Print("  ✓ already latest v%s  (use --force to reinstall)\n", latest)
+				}
 				return nil
 			}
 
@@ -145,32 +197,41 @@ checksums.txt, and atomically replaces the running binary.
 	return cmd
 }
 
-// latestReleaseTag asks the public GitHub API for the newest stable release tag.
+// latestReleaseTag resolves the newest release tag WITHOUT hitting the GitHub
+// API. `github.com/<owner>/<repo>/releases/latest` answers any unauthenticated
+// request with a 302 → `.../releases/tag/<tag>`; reading that Location avoids
+// the api.github.com 60/hr rate limit that surfaces as HTTP 403.
 func latestReleaseTag(ctx context.Context) (string, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", githubAPIBase, upgradeOwner, upgradeRepo)
+	url := fmt.Sprintf("%s/%s/%s/releases/latest", githubDownloadBase, upgradeOwner, upgradeRepo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		// Don't follow the redirect — we only want the Location header.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API HTTP %d", resp.StatusCode)
+
+	loc := resp.Header.Get("Location")
+	if loc == "" {
+		return "", fmt.Errorf("no release redirect (HTTP %d) — repo may have no releases yet", resp.StatusCode)
 	}
-	var rel struct {
-		TagName string `json:"tag_name"`
+	const marker = "/releases/tag/"
+	idx := strings.LastIndex(loc, marker)
+	if idx < 0 {
+		return "", fmt.Errorf("unexpected redirect target %q", loc)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return "", err
+	tag := strings.Trim(loc[idx+len(marker):], "/")
+	if tag == "" {
+		return "", fmt.Errorf("empty tag in redirect %q", loc)
 	}
-	if rel.TagName == "" {
-		return "", fmt.Errorf("no tag_name in release response")
-	}
-	return rel.TagName, nil
+	return tag, nil
 }
 
 // downloadAndVerifyUpgrade fetches the archive + checksums.txt and verifies sha256.

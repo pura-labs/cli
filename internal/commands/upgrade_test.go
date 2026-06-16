@@ -35,8 +35,9 @@ func makePuraTarGz(t *testing.T, content []byte) []byte {
 	return buf.Bytes()
 }
 
-// upgradeServer serves the GitHub release JSON + archive + checksums.txt for the
-// current OS/arch. badChecksum corrupts the published sha to test verification.
+// upgradeServer mimics github.com: a /releases/latest 302 → /releases/tag/<tag>
+// (how we resolve "latest" without the rate-limited API), plus the archive and
+// checksums.txt for the current OS/arch. badChecksum corrupts the published sha.
 func upgradeServer(t *testing.T, tag string, tgz []byte, badChecksum bool) *httptest.Server {
 	t.Helper()
 	archive := fmt.Sprintf("pura_%s_%s_%s.tar.gz", normalizeVer(tag), runtime.GOOS, runtime.GOARCH)
@@ -46,8 +47,9 @@ func upgradeServer(t *testing.T, tag string, tgz []byte, badChecksum bool) *http
 		hexsum = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/pura-labs/cli/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintf(w, `{"tag_name":%q}`, tag)
+	mux.HandleFunc("/pura-labs/cli/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		// Relative Location is enough — the resolver only parses for /releases/tag/.
+		http.Redirect(w, r, "/pura-labs/cli/releases/tag/"+tag, http.StatusFound)
 	})
 	dl := fmt.Sprintf("/pura-labs/cli/releases/download/%s/", tag)
 	mux.HandleFunc(dl+archive, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(tgz) })
@@ -59,9 +61,9 @@ func upgradeServer(t *testing.T, tag string, tgz []byte, badChecksum bool) *http
 
 func pointUpgradeAt(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	oa, od := githubAPIBase, githubDownloadBase
-	githubAPIBase, githubDownloadBase = srv.URL, srv.URL
-	t.Cleanup(func() { githubAPIBase, githubDownloadBase = oa, od })
+	od := githubDownloadBase
+	githubDownloadBase = srv.URL
+	t.Cleanup(func() { githubDownloadBase = od })
 }
 
 func writeTarget(t *testing.T) string {
@@ -138,6 +140,31 @@ func TestUpgrade_AlreadyLatestNoOp(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(target); string(got) != "OLD" {
 		t.Fatal("already-latest must be a no-op without --force")
+	}
+}
+
+// Regression: when the local build is NEWER than the latest published release
+// (e.g. a freshly built dev binary), a bare `pura upgrade` must not downgrade.
+func TestUpgrade_AheadOfLatestNoOp(t *testing.T) {
+	resetCommandGlobals()
+	defer resetCommandGlobals()
+
+	old := versionStr
+	versionStr = "9.9.9" // ahead of the published v0.1.0
+	defer func() { versionStr = old }()
+
+	srv := upgradeServer(t, "v0.1.0", makePuraTarGz(t, []byte("older")), false)
+	defer srv.Close()
+	pointUpgradeAt(t, srv)
+
+	target := writeTarget(t)
+	cmd := rootCmd
+	cmd.SetArgs([]string{"upgrade", "--binary-path", target})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("upgrade: %v", err)
+	}
+	if got, _ := os.ReadFile(target); string(got) != "OLD" {
+		t.Fatal("must not downgrade: bare `upgrade` when ahead of latest is a no-op")
 	}
 }
 
