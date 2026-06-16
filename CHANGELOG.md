@@ -7,6 +7,11 @@ by goreleaser.
 ## [0.2.0] - 2026-06-15
 
 ### Added
+- **`pura upgrade`** (alias `update`) — public self-upgrade. Pulls the release
+  for your OS/arch straight from GitHub releases (same source as install.sh),
+  verifies sha256 against `checksums.txt`, and atomically replaces the running
+  binary. No sign-in. `--check` (report only), `--force` (reinstall when latest),
+  `--version vX.Y.Z` (pin / downgrade).
 - **Embed-first `pura push`.** Pushing a markdown/HTML doc that references local
   images (`![](./pic.png)`, `<img src="/abs/pic.png">`) now uploads each local
   image to your image host first, then rewrites the reference to the canonical
