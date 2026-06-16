@@ -13,6 +13,14 @@ by goreleaser.
   binary. No sign-in. `--check` (report only), `--force` (reinstall when latest),
   `--version vX.Y.Z` (pin / downgrade).
 
+### Changed
+- The bundled skill now documents the image host (`pura image`, embed-first
+  push, `/library`) and `pura upgrade`, so `pura skill install` ships docs in
+  sync with the CLI.
+- `pura skill install` confirms before overwriting an existing install
+  (prompts on a TTY, requires `--force` non-interactively) — no more silently
+  clobbering a hand-edited `SKILL.md`.
+
 ## [0.2.0] - 2026-06-15
 
 ### Added
