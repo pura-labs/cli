@@ -144,11 +144,19 @@ user wants to …
 │   └── go back?            → pura versions restore <slug> <N> --yes
 │
 ├── manage
-│   ├── list own docs?      → pura ls
+│   ├── list own docs?      → pura ls   (images/files excluded — see library)
 │   ├── delete?             → pura rm <slug> --yes
 │   ├── claim anon docs?    → pura claim <edit_token>
 │   ├── stats?              → pura stats <slug>  (--detail for owner)
 │   └── activity stream?    → pura events <slug>  (--follow to tail)
+│
+├── images (图床)
+│   ├── doc references local imgs? → just pura push <doc> (auto-hosts + rewrites)
+│   ├── upload a standalone image? → pura push <file.png>
+│   ├── list your images?          → pura image ls
+│   ├── inspect one?               → pura image get <slug>
+│   ├── delete (refcount-guarded)? → pura image rm <slug> --yes [--force]
+│   └── browse in the web UI?      → /library
 │
 ├── setup / debug
 │   ├── sign in?            → pura auth login  (or --token <t> for CI)
@@ -156,6 +164,7 @@ user wants to …
 │   ├── sign out?           → pura auth logout
 │   ├── mint CI key?        → pura keys create --name "ci:…" [--scope docs:write]
 │   ├── revoke key?         → pura keys rm <id|prefix> --yes
+│   ├── update the CLI?     → pura upgrade  (--check | --force | --version vX.Y.Z)
 │   └── why is it broken?   → pura doctor
 │
 └── switch profile (e.g. personal ↔ work)
@@ -192,7 +201,7 @@ pura auth token [--yes]           # print raw; TTY guard, --yes to confirm
 ### Content
 
 ```
-pura push <file> [--title "…"] [--substrate <m>] [--kind <k>] [--theme <p>] [--open]
+pura push <file> [--title "…"] [--substrate <m>] [--kind <k>] [--theme <p>] [--open] [--no-embed]
 pura push --stdin --substrate <m> --title "…"      # from pipe
 pura get <slug> [-f raw|ctx|meta] [-o <file>]
 pura edit <slug> --file <new.md>   | cat … | pura edit <slug> --stdin
@@ -201,6 +210,44 @@ pura ls
 pura open <slug>
 pura preview <file>                # dry-run: what substrate would it be?
 ```
+
+### Embed-first images (图床) — pushing a doc that references local images
+
+When you `pura push` a markdown/HTML doc that references **local** image files
+(`![alt](./pic.png)`, `<img src="/abs/pic.png">`), the CLI **auto-uploads each
+local image to the user's image host first, then rewrites the reference to the
+canonical `https://i.pura.so/…` URL** before creating the doc. So the published
+doc is self-contained — no broken local paths, no hotlink rot. You do NOT need
+to upload images separately; just reference them by path and push the doc.
+
+- EXIF/metadata is stripped on ingest; identical bytes dedupe to one library item.
+- External `http(s)` image URLs are left as-is in the CLI and **rehosted
+  server-side on publish/save**. `data:` URIs are left inline.
+- A **relative** path that doesn't resolve, or a local image that's oversize /
+  not an image, **aborts the push** (no dead links). Absolute paths that don't
+  resolve (likely site-root web paths) are left untouched.
+- `--no-embed` disables local upload/rewrite (publish paths verbatim).
+- Images/files are excluded from `pura ls` (they live in the library, below).
+
+```bash
+# hero.png sits next to post.md → uploaded + rewritten automatically
+pura push post.md --title "Launch"
+```
+
+### Image library (图床) — `pura image`
+
+```
+pura image ls [--query "<q>"] [--limit N]   # your images + usage_count
+pura image get <slug>                        # url + dims/size/alt/tags
+pura image rm <slug> [--yes] [--force]        # refcount-guarded delete
+```
+
+- `rm` is **refcount-guarded**: if the image is still embedded in a doc it
+  returns 409 `in_use` and lists the consuming docs; `--force` deletes anyway
+  (embedded copies keep serving — the R2 object is kept while referenced).
+- Web UI: the gallery lives at **`/library`** (also linked from the dashboard) —
+  browse, search, copy-URL, delete.
+- Upload a standalone image with `pura push <file.png>` (kind auto-detected).
 
 ### AI editing (propose-gate)
 
@@ -281,6 +328,7 @@ pura events <slug> [--since <id>]
 ```
 pura doctor                              # config / network / auth / profile checks
 pura version                             # CLI version, commit, date
+pura upgrade [--check|--force|--version vX.Y.Z]   # self-update from GitHub releases (sha256-verified)
 pura completion bash|zsh|fish
 ```
 
