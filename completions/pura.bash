@@ -2515,6 +2515,8 @@ _pura_skill_install()
     flags_with_completion=()
     flags_completion=()
 
+    flags+=("--force")
+    local_nonpersistent_flags+=("--force")
     flags+=("--source=")
     two_word_flags+=("--source")
     local_nonpersistent_flags+=("--source")

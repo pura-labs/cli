@@ -53,6 +53,34 @@ func TestSkillInstall_CustomTarget(t *testing.T) {
 	}
 }
 
+func TestSkillInstall_RefusesOverwriteWithoutForce(t *testing.T) {
+	setupIsolatedHome(t)
+	custom := t.TempDir()
+	if _, err := runCmd(t, "skill", "install", "--target", custom, "--json"); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	dest := filepath.Join(custom, "pura", "SKILL.md")
+	if err := os.WriteFile(dest, []byte("# HAND EDITED"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Non-TTY, no --force → must refuse and keep the hand-edited copy.
+	if _, err := runCmd(t, "skill", "install", "--target", custom, "--json"); err == nil {
+		t.Fatal("expected refusal to overwrite an existing skill without --force")
+	}
+	if got, _ := os.ReadFile(dest); string(got) != "# HAND EDITED" {
+		t.Fatalf("existing skill must be preserved, got: %q", got)
+	}
+
+	// --force → overwrites.
+	if _, err := runCmd(t, "skill", "install", "--target", custom, "--force", "--json"); err != nil {
+		t.Fatalf("install --force: %v", err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) == "# HAND EDITED" {
+		t.Fatal("--force should have overwritten the hand-edited skill")
+	}
+}
+
 func TestSkillInstall_FromLocalSource(t *testing.T) {
 	setupIsolatedHome(t)
 	src := t.TempDir()

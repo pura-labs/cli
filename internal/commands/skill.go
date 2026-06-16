@@ -54,12 +54,14 @@ func knownTargets() []skillTarget {
 var (
 	skillInstallTarget string
 	skillInstallSource string
+	skillInstallForce  bool
 	skillRmAllTargets  bool
 )
 
 func resetSkillFlags() {
 	skillInstallTarget = ""
 	skillInstallSource = ""
+	skillInstallForce = false
 	skillRmAllTargets = false
 }
 
@@ -221,6 +223,31 @@ installing as "pura" unless a name is provided.`,
 			}
 			mgr := skill.NewManagerWithDir(target)
 
+			// Guard against silently clobbering a hand-edited copy. If the
+			// destination SKILL.md already exists, confirm (TTY) or require
+			// --force (non-TTY) before overwriting.
+			destFile := filepath.Join(mgr.Dir(), name, "SKILL.md")
+			if _, statErr := os.Stat(destFile); statErr == nil {
+				ok, cErr := confirmMutation(
+					w,
+					skillInstallForce,
+					"--force",
+					fmt.Sprintf("%s skill already installed at %s — overwrite?", name, destFile),
+					"Any local edits to this copy will be replaced.",
+					"Overwrite",
+				)
+				if cErr != nil {
+					w.Error("confirmation_required",
+						fmt.Sprintf("%s already installed at %s", name, destFile),
+						"Re-run with --force to overwrite (local edits to this copy will be lost).")
+					return cErr
+				}
+				if !ok {
+					w.Print("  Cancelled — kept the existing %s skill.\n", name)
+					return nil
+				}
+			}
+
 			var err error
 			if skillInstallSource != "" {
 				err = mgr.InstallFromSource(name, skillInstallSource)
@@ -245,6 +272,7 @@ installing as "pura" unless a name is provided.`,
 	}
 	cmd.Flags().StringVar(&skillInstallTarget, "target", "", "Destination directory (default: ~/.claude/skills)")
 	cmd.Flags().StringVar(&skillInstallSource, "source", "", "External source (URL or local path); omit for the built-in")
+	cmd.Flags().BoolVar(&skillInstallForce, "force", false, "Overwrite an existing install without confirmation")
 	return cmd
 }
 

@@ -133,6 +133,7 @@ pura sheet ls  — List rows from a sheet
 pura sheet schema  — Show a sheet's column schema and version
 pura skill  — Install the Pura agent skill (SKILL.md) into a known location
 pura skill install  — Install a skill (defaults to the built-in pura skill)
+    --force  Overwrite an existing install without confirmation
     --source <string>  External source (URL or local path); omit for the built-in
     --target <string>  Destination directory (default: ~/.claude/skills)
 pura skill ls  — List installed skills across every known target
