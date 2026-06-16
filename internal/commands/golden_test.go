@@ -54,6 +54,7 @@ var helpCases = []struct {
 	{"skill", []string{"skill", "--help"}, "skill.txt"},
 	{"image", []string{"image", "--help"}, "image.txt"},
 	{"image_rm", []string{"image", "rm", "--help"}, "image-rm.txt"},
+	{"upgrade", []string{"upgrade", "--help"}, "upgrade.txt"},
 }
 
 func TestHelpGolden(t *testing.T) {

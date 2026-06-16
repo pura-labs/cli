@@ -150,6 +150,11 @@ pura tool inspect  — Show a tool's input schema and docs
     --refresh  Re-fetch the catalog before looking up
 pura tool ls  — List available tools (cached; --refresh to force a fetch)
     --refresh  Re-fetch the catalog from the server
+pura upgrade  — Upgrade the pura CLI to the latest release
+    --binary-path <string>  Override the binary to replace (testing)
+    --check  Only check for a newer version; don't install
+    --force  Reinstall even if already on the latest version
+    --version <string>  Target version (vX.Y.Z); defaults to latest
 pura version  — Print version info
 pura versions  — Inspect and restore document versions
 pura versions diff  — Unified diff between two versions (B defaults to latest)

@@ -2884,6 +2884,48 @@ _pura_tool()
     noun_aliases=()
 }
 
+_pura_upgrade()
+{
+    last_command="pura_upgrade"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--check")
+    local_nonpersistent_flags+=("--check")
+    flags+=("--force")
+    local_nonpersistent_flags+=("--force")
+    flags+=("--version=")
+    two_word_flags+=("--version")
+    local_nonpersistent_flags+=("--version")
+    local_nonpersistent_flags+=("--version=")
+    flags+=("--api-url=")
+    two_word_flags+=("--api-url")
+    flags+=("--handle=")
+    two_word_flags+=("--handle")
+    flags+=("--jq=")
+    two_word_flags+=("--jq")
+    flags+=("--json")
+    flags+=("--profile=")
+    two_word_flags+=("--profile")
+    flags+=("--quiet")
+    flags+=("--token=")
+    two_word_flags+=("--token")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _pura_version()
 {
     last_command="pura_version"
@@ -3134,6 +3176,11 @@ _pura_root_command()
     commands+=("skill")
     commands+=("stats")
     commands+=("tool")
+    commands+=("upgrade")
+    if [[ -z "${BASH_VERSION:-}" || "${BASH_VERSINFO[0]:-}" -gt 3 ]]; then
+        command_aliases+=("update")
+        aliashash["update"]="upgrade"
+    fi
     commands+=("version")
     commands+=("versions")
 

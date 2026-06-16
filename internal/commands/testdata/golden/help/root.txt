@@ -29,6 +29,7 @@ Available Commands:
   skill       Install the Pura agent skill (SKILL.md) into a known location
   stats       Show view stats for a document
   tool        Call any Pura tool via /api/tool/:name (dispatcher escape hatch)
+  upgrade     Upgrade the pura CLI to the latest release
   version     Print version info
   versions    Inspect and restore document versions
 

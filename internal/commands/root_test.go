@@ -48,7 +48,7 @@ func resetCommandGlobals() {
 // commands' flag state.
 func resetPushFlags() {
 	for _, c := range rootCmd.Commands() {
-		if c.Name() != "push" {
+		if c.Name() != "push" && c.Name() != "upgrade" {
 			continue
 		}
 		c.LocalFlags().VisitAll(func(f *pflag.Flag) {

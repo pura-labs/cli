@@ -1,0 +1,30 @@
+Upgrade pura to the latest GitHub release (public; no sign-in needed).
+Downloads the release for your OS/arch, verifies its sha256 against
+checksums.txt, and atomically replaces the running binary.
+
+  pura upgrade                  # upgrade to latest (no-op if already current)
+  pura upgrade --check          # only report whether a newer version exists
+  pura upgrade --force          # reinstall even if already latest
+  pura upgrade --version v0.2.0 # install a specific version (incl. downgrade)
+
+Usage:
+  pura upgrade [flags]
+
+Aliases:
+  upgrade, update
+
+Flags:
+      --check            Only check for a newer version; don't install
+      --force            Reinstall even if already on the latest version
+  -h, --help             help for upgrade
+      --version string   Target version (vX.Y.Z); defaults to latest
+
+Global Flags:
+      --api-url string   Override API endpoint
+      --handle string    User handle (accepts alice or @alice; defaults to _)
+      --jq string        Filter JSON output with jq expression
+      --json             Force JSON output
+      --profile string   Use named profile
+      --quiet            Raw data only (no envelope)
+      --token string     Override stored token
+  -v, --verbose          Verbose output
